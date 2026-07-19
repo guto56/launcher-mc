@@ -229,3 +229,122 @@ pub fn open_minecraft_folder(path: String) -> Result<(), String> {
 pub fn base_url() -> String {
     api_base()
 }
+
+// =============================================================================
+// Comandos de rede para o painel (via reqwest, fora da webview).
+//
+// `fetchServerMods()` e `fetchStatus()` no JS usavam `fetch()` da webview e
+// falhavam com `load failed` no Tauri/macOS. Agora essas chamadas saem do
+// binário Rust (mesmo caminho comprovado do `download_mod`), eliminando a
+// dependência do `fetch` da WKWebView.
+// =============================================================================
+
+/// Representação de um mod exposto pelo painel (`/api/mods`).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ServerMod {
+    pub file: String,
+    pub name: String,
+    pub version: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub size: u64,
+}
+
+/// Resposta envelopada de `/api/mods` (`{count, mods}`).
+#[derive(Debug, Clone, serde::Deserialize)]
+struct ModsResponse {
+    #[serde(default)]
+    count: usize,
+    #[serde(default)]
+    mods: Vec<ServerMod>,
+}
+
+/// Status do servidor retornado por `/api/status`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ServerStatus {
+    pub running: bool,
+    #[serde(default)]
+    pub pid: u32,
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub port: u16,
+    #[serde(default)]
+    pub public_ip: String,
+    #[serde(default)]
+    pub join_link: String,
+    #[serde(default)]
+    pub players_online: u32,
+    #[serde(default)]
+    pub players_max: u32,
+    #[serde(default)]
+    pub uptime_seconds: u64,
+    #[serde(default)]
+    pub motd: String,
+    #[serde(default)]
+    pub started_at: String,
+}
+
+/// Lista os mods exigidos pelo servidor (`GET /api/mods`).
+///
+/// Faz a requisição via reqwest (fora da webview) e retorna o array de mods.
+#[tauri::command]
+pub async fn server_mods() -> Result<Vec<ServerMod>, String> {
+    let url = format!("{}/api/mods", api_base());
+
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|e| format!("Falha ao criar cliente HTTP: {e}"))?;
+
+    let resp = client
+        .get(&url)
+        .header("Accept", "application/json")
+        .header("User-Agent", "LauncherMC/1.0 (Tauri)")
+        .send()
+        .await
+        .map_err(|e| format!("Falha ao conectar no painel (mods): {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "Servidor retornou status {} em /api/mods",
+            resp.status()
+        ));
+    }
+
+    let body = resp
+        .json::<ModsResponse>()
+        .await
+        .map_err(|e| format!("Falha ao parsear JSON de /api/mods: {e}"))?;
+
+    Ok(body.mods)
+}
+
+/// Consulta o status do servidor (`GET /api/status`).
+#[tauri::command]
+pub async fn server_status() -> Result<ServerStatus, String> {
+    let url = format!("{}/api/status", api_base());
+
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|e| format!("Falha ao criar cliente HTTP: {e}"))?;
+
+    let resp = client
+        .get(&url)
+        .header("Accept", "application/json")
+        .header("User-Agent", "LauncherMC/1.0 (Tauri)")
+        .send()
+        .await
+        .map_err(|e| format!("Falha ao conectar no painel (status): {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "Servidor retornou status {} em /api/status",
+            resp.status()
+        ));
+    }
+
+    resp.json::<ServerStatus>()
+        .await
+        .map_err(|e| format!("Falha ao parsear JSON de /api/status: {e}"))
+}

@@ -18,6 +18,8 @@ pub fn run() {
             open_minecraft_folder,
             download_mod,
             base_url,
+            server_mods,
+            server_status,
         ])
         .run(tauri::generate_context!())
         .expect("erro ao rodar o Launcher MC");

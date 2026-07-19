@@ -1,8 +1,17 @@
 // =============================================================================
-// api.js — Wrapper das chamadas HTTP à API do painel.
+// api.js — Wrapper das chamadas à API do painel.
+//
 //   GET /api/mods    -> lista de mods exigidos pelo servidor
 //   GET /api/status  -> status do servidor (online/offline, players, versão)
+//
+// IMPORTANTE: as requisições saem do binário Rust (via reqwest) através dos
+// comandos `server_mods` / `server_status`. Antes usávamos `fetch()` da
+// webview, que falhava com `load failed` no Tauri/macOS — agora o caminho é o
+// mesmo comprovado do `download_mod`. O tratamento de erro (try/catch + card
+// vermelho) continua na camada de UI (main.js/ui.js).
 // =============================================================================
+
+import { serverMods, serverStatus } from './fs.js';
 
 let BASE_URL = 'https://painel-mc.centralchamados.xyz';
 
@@ -18,43 +27,20 @@ export function getApiBase() {
 const CONNECT_ERROR_MSG =
   'Não foi possível conectar no painel-mc. Verifique sua internet.';
 
-async function getJson(path) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
-
-  let res;
+// Lista de mods do servidor. O comando Rust retorna um array de
+// { file, name, version, description, size } (já desenvelopado de {count, mods}).
+export async function fetchServerMods() {
+  let data;
   try {
-    res = await fetch(`${BASE_URL}${path}`, {
-      headers: { Accept: 'application/json' },
-      signal: controller.signal,
-    });
+    data = await serverMods();
   } catch (e) {
-    clearTimeout(timeout);
-    // Preserva a causa técnica no console para diagnóstico.
-    const cause = e && e.name === 'AbortError' ? 'timeout (10s)' : e;
-    console.error(`Falha ao buscar ${path}:`, cause);
-    // Lança sempre com a mensagem amigável de topo.
+    const msg = e && e.message ? e.message : String(e);
+    console.error('Falha ao comparar mods:', msg);
     const err = new Error(CONNECT_ERROR_MSG);
-    err.cause = cause;
+    err.cause = msg;
     throw err;
   }
-
-  clearTimeout(timeout);
-
-  if (!res.ok) {
-    const err = new Error(`HTTP ${res.status} em ${path}`);
-    console.error('Resposta não-OK da API:', err.message);
-    const friendly = new Error(CONNECT_ERROR_MSG);
-    friendly.cause = err.message;
-    throw friendly;
-  }
-  return res.json();
-}
-
-// Lista de mods do servidor. A rota /api/mods retorna { count, mods: [...] }.
-export async function fetchServerMods() {
-  const data = await getJson('/api/mods');
-  const mods = Array.isArray(data) ? data : data.mods || [];
+  const mods = Array.isArray(data) ? data : [];
   return mods.map((m) => ({
     file: m.file,
     name: m.name || m.file,
@@ -64,7 +50,30 @@ export async function fetchServerMods() {
   }));
 }
 
-// Status do servidor.
+// Status do servidor. O comando Rust retorna o objeto de status diretamente
+// (running, players_online, version, ...). Mapeamos para camelCase na UI.
 export async function fetchStatus() {
-  return getJson('/api/status');
+  let s;
+  try {
+    s = await serverStatus();
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    console.error('Falha ao obter status:', msg);
+    const err = new Error(CONNECT_ERROR_MSG);
+    err.cause = msg;
+    throw err;
+  }
+  return {
+    running: s.running,
+    pid: s.pid,
+    version: s.version || '',
+    port: s.port,
+    publicIp: s.public_ip || '',
+    joinLink: s.join_link || '',
+    playersOnline: s.players_online || 0,
+    playersMax: s.players_max || 0,
+    uptimeSeconds: s.uptime_seconds || 0,
+    motd: s.motd || '',
+    startedAt: s.started_at || '',
+  };
 }

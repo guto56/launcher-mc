@@ -75,6 +75,20 @@ async function devInvoke(cmd, args) {
     const buf = await res.arrayBuffer();
     return Array.from(new Uint8Array(buf));
   }
+  if (cmd === 'server_mods') {
+    // Em dev, consulta a API real via fetch do navegador.
+    const base = window.__LAUNCHER_API_BASE__ || 'http://localhost:8080';
+    const res = await fetch(`${base}/api/mods`, { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data) ? data : data.mods || [];
+  }
+  if (cmd === 'server_status') {
+    const base = window.__LAUNCHER_API_BASE__ || 'http://localhost:8080';
+    const res = await fetch(`${base}/api/status`, { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
   throw new Error('Comando não suportado em modo dev: ' + cmd);
 }
 
@@ -104,4 +118,14 @@ export async function downloadMod(filename) {
 
 export async function getBaseUrl() {
   return invoke('base_url');
+}
+
+// Consulta a lista de mods do servidor via comando Rust (server_mods).
+export async function serverMods() {
+  return invoke('server_mods');
+}
+
+// Consulta o status do servidor via comando Rust (server_status).
+export async function serverStatus() {
+  return invoke('server_status');
 }
