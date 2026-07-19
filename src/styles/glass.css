@@ -1,0 +1,30 @@
+/* =========================================================================
+   Launcher MC — Efeitos Glassmorphism (backdrop-filter)
+   A webview Tauri (WebKit/WebView2) renderiza blur nativamente = igual ao site.
+   ========================================================================= */
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid var(--glass-brd);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(124,58,237,0.25),
+              inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+/* Fallback: se não houver suporte a backdrop-filter, garante fundo visível. */
+@supports not (backdrop-filter: blur(14px)) {
+  .glass {
+    background: rgba(139,92,246,0.22);
+    border: 1px solid rgba(196,181,253,0.4);
+    box-shadow: 0 10px 40px rgba(124,58,237,0.45),
+                inset 0 1px 0 rgba(255,255,255,0.12);
+  }
+}
+@supports not ((-webkit-backdrop-filter: blur(14px))) {
+  .glass {
+    background: rgba(139,92,246,0.22);
+    border: 1px solid rgba(196,181,253,0.4);
+  }
+}

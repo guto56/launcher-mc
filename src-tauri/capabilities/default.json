@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "launcher-mc:default",
+  "description": "Capacidades padrão do Launcher MC (comandos locais + diálogo).",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "launcher-mc:allow-detect-mods-dir",
+    "launcher-mc:allow-list-local-mods",
+    "launcher-mc:allow-save-mod",
+    "launcher-mc:allow-open-minecraft-folder",
+    "launcher-mc:allow-download-mod",
+    "launcher-mc:allow-base-url"
+  ]
+}

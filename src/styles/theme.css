@@ -1,0 +1,250 @@
+/* =========================================================================
+   Launcher MC — Tema ROXO (reutilizado do site painel-mc) + Glassmorfism
+   ========================================================================= */
+
+:root {
+  /* Roxo Minecraft / Aether vibe (copiado do painel-mc) */
+  --bg-0:        #0b0612;
+  --bg-1:        #150a24;
+  --bg-2:        #1d0f33;
+  --purple:      #8b5cf6;
+  --purple-deep: #6d28d9;
+  --purple-light:#c4b5fd;
+  --purple-glow: #a855f7;
+  --accent:      #e9d5ff;
+  --glass-bg:    rgba(139,92,246,0.08);
+  --glass-brd:   rgba(196,181,253,0.18);
+  --text:        #ece9f5;
+  --muted:       #a89bc9;
+  --online:      #4ade80;
+  --offline:     #f87171;
+  --warn:        #fbbf24;
+  --mc-font:     'Press Start 2P', 'VT323', monospace;
+  --ui-font:     'VT323', 'Segoe UI', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  font-family: var(--ui-font);
+  font-size: 20px;
+  background:
+     radial-gradient(1200px 600px at 80% -10%, var(--purple-deep) 0%, transparent 60%),
+     radial-gradient(900px 500px at 0% 110%, #3b0764 0%, transparent 55%),
+     linear-gradient(180deg, var(--bg-1), var(--bg-0));
+  background-attachment: fixed;
+  overflow-x: hidden;
+}
+
+/* Orbes decorativos (parallax) */
+.bg-orb {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.35;
+  pointer-events: none;
+  z-index: 0;
+  will-change: transform;
+}
+.orb-1 { width: 420px; height: 420px; top: -120px; right: -80px; background: var(--purple-glow); }
+.orb-2 { width: 340px; height: 340px; bottom: -100px; left: -90px; background: #7c3aed; }
+.orb-3 { width: 260px; height: 260px; top: 40%; left: 55%; background: #c026d3; opacity: 0.18; }
+
+/* Nav */
+.topnav {
+  position: sticky;
+  top: 12px;
+  z-index: 20;
+  margin: 12px auto 0;
+  max-width: 1100px;
+  width: calc(100% - 32px);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 20px;
+  border-radius: 18px;
+}
+.brand { font-family: var(--mc-font); font-size: 13px; color: var(--accent); letter-spacing: 1px; }
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 20px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-brd);
+  background: var(--glass-bg);
+  letter-spacing: 1px;
+}
+.status-badge .dot {
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--offline);
+  box-shadow: 0 0 10px var(--offline);
+  transition: background .3s, box-shadow .3s;
+}
+.status-badge.online .dot {
+  background: var(--online);
+  box-shadow: 0 0 12px var(--online);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%,100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: .7; }
+}
+
+main {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 36px 16px 80px;
+}
+
+.hero { text-align: center; padding: 30px 0 10px; }
+.mc-title {
+  font-family: var(--mc-font);
+  font-size: clamp(20px, 4vw, 34px);
+  line-height: 1.5;
+  color: var(--accent);
+  text-shadow: 0 0 18px rgba(168,85,247,0.55);
+  margin: 0 0 14px;
+}
+.subtitle { color: var(--muted); font-size: 24px; margin: 0 0 26px; }
+.subtitle b { color: var(--purple-light); }
+
+/* Botão roxo (gradiente + hover) */
+.btn-purple {
+  font-family: var(--mc-font);
+  font-size: 13px;
+  color: #fff;
+  padding: 14px 22px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--purple-deep), var(--purple-glow));
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease, opacity .2s ease;
+  box-shadow: 0 6px 20px rgba(124,58,237,0.35);
+}
+.btn-purple:hover:not(:disabled) {
+  transform: translateY(-3px) scale(1.03);
+  border-color: var(--purple-light);
+  box-shadow: 0 0 30px rgba(168,85,247,0.6);
+}
+.btn-purple:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+.btn-purple.ghost { background: var(--glass-bg); color: var(--purple-light); }
+
+/* Seções / títulos */
+.section-title {
+  font-family: var(--mc-font);
+  font-size: 16px;
+  color: var(--accent);
+  margin: 10px 0 18px;
+  text-shadow: 0 0 14px rgba(168,85,247,0.4);
+}
+.section-title small { color: var(--purple-light); }
+.mods-sub { color: var(--muted); font-size: 22px; margin: 0 0 22px; }
+
+/* Grid de mods */
+.mod-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 16px;
+}
+.mod-card {
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: transform .25s, box-shadow .25s, border-color .25s;
+}
+.mod-card:hover {
+  transform: translateY(-6px) scale(1.02);
+  border-color: var(--purple-light);
+  box-shadow: 0 14px 40px rgba(124,58,237,0.4);
+}
+.mod-icon {
+  font-size: 34px;
+  width: 54px; height: 54px;
+  display: grid; place-items: center;
+  background: rgba(139,92,246,0.16);
+  border-radius: 14px;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 14px rgba(168,85,247,0.3);
+}
+.mod-info { min-width: 0; flex: 1; }
+.mod-name { font-size: 24px; color: var(--text); word-break: break-word; }
+.mod-meta { font-size: 19px; color: var(--purple-light); margin-top: 2px; }
+
+/* Badge de estado do mod (faltando / desatualizado / ok) */
+.mod-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 17px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-top: 6px;
+  border: 1px solid var(--glass-brd);
+}
+.mod-state.ok { background: rgba(74,222,128,0.12); color: var(--online); }
+.mod-state.missing { background: rgba(248,113,113,0.12); color: var(--offline); }
+.mod-state.outdated { background: rgba(251,191,36,0.14); color: var(--warn); }
+
+.empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--muted);
+  font-size: 24px;
+  padding: 40px 0;
+}
+
+/* Barra de progresso */
+.progress-track {
+  width: 100%;
+  height: 14px;
+  background: rgba(139,92,246,0.12);
+  border: 1px solid var(--glass-brd);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--purple-deep), var(--purple-glow), var(--purple-light));
+  background-size: 200% 100%;
+  border-radius: 999px;
+  transition: width .25s ease;
+  animation: shimmer 1.6s linear infinite;
+}
+@keyframes shimmer {
+  0% { background-position: 0% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%) translateY(140%);
+  padding: 16px 26px;
+  font-size: 22px;
+  border-radius: 14px;
+  background: rgba(13,10,31,0.9);
+  border: 1px solid var(--glass-brd);
+  box-shadow: 0 10px 40px rgba(124,58,237,0.5);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 50;
+  transition: transform .4s cubic-bezier(.2,.7,.2,1);
+  pointer-events: none;
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+.toast.ok { color: var(--online); }
+.toast.err { color: var(--offline); }

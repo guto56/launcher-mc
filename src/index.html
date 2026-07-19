@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Launcher MC — painel-mc</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles/theme.css" />
+  <link rel="stylesheet" href="./styles/glass.css" />
+  <link rel="stylesheet" href="./styles/animations.css" />
+</head>
+<body>
+  <!-- Orbes decorativos (mesmo do site painel-mc) -->
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+  <div class="bg-orb orb-3"></div>
+
+  <nav class="topnav glass">
+    <span class="brand">LAUNCHER MC</span>
+    <div id="statusBadge" class="status-badge">
+      <span class="dot"></span>
+      <span id="statusText">…</span>
+      <span id="playersText" style="margin-left:8px;color:var(--purple-light)"></span>
+    </div>
+    <button id="refreshBtn" class="btn-purple navlink" style="font-size:18px;padding:8px 14px;">↻ Atualizar</button>
+  </nav>
+
+  <main>
+    <header class="hero reveal">
+      <h1 class="mc-title">INSTALADOR DE MODS</h1>
+      <p class="subtitle">Detectamos sua pasta do Minecraft e baixamos <b>só o que falta</b>.</p>
+      <div id="modsDirInfo" class="status-badge" style="font-size:18px;">
+        <span style="color:var(--purple-light)">pasta:</span>
+        <span id="modsDirPath" style="color:var(--text)">detectando…</span>
+      </div>
+    </header>
+
+    <section class="controls reveal" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:18px 0;">
+      <button id="installBtn" class="btn-purple" disabled>Instalar tudo</button>
+      <button id="openFolderBtn" class="btn-purple ghost" style="font-size:20px;">📂 Abrir pasta</button>
+      <span id="diffSummary" class="mods-sub" style="margin:0;"></span>
+    </section>
+
+    <!-- Barra de progresso -->
+    <div id="progressWrap" class="glass reveal" style="padding:14px 18px;margin:10px 0 22px;display:none;">
+      <div style="display:flex;justify-content:space-between;font-size:20px;margin-bottom:8px;">
+        <span id="progressLabel">Baixando…</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="progress-track">
+        <div id="progressBar" class="progress-fill"></div>
+      </div>
+    </div>
+
+    <section class="reveal">
+      <h2 class="section-title">Mods do servidor <small id="modCount"></small></h2>
+      <div id="modGrid" class="mod-grid"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
