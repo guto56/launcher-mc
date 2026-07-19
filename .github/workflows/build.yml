@@ -40,8 +40,45 @@ jobs:
           name: launcher-mac-silicon-dmg
           path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
 
+  build-windows:
+    name: Build Windows (x64 .msi)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Rust (MSVC x64)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend deps
+        run: npm install
+
+      - name: Build Tauri (Windows -> .msi)
+        run: npm run tauri build
+        env:
+          LAUNCHER_API_BASE: ${{ secrets.LAUNCHER_API_BASE || 'https://painel-mc.centralchamados.xyz' }}
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-windows-msi
+          path: src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+
   release:
-    needs: [build-macos]
+    needs: [build-macos, build-windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
