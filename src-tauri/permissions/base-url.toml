@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-base-url"
+description = "Allows reading the server API base URL"
+commands.allow = ["base_url"]

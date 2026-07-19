@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-download-mod"
+description = "Allows downloading a mod jar from the server API"
+commands.allow = ["download_mod"]

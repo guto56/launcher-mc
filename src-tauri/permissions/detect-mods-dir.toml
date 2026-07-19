@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-detect-mods-dir"
+description = "Allows detecting the Minecraft mods directory"
+commands.allow = ["detect_mods_dir"]

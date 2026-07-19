@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-open-minecraft-folder"
+description = "Allows opening the Minecraft folder in the file explorer"
+commands.allow = ["open_minecraft_folder"]

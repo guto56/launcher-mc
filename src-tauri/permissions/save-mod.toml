@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-save-mod"
+description = "Allows saving a downloaded mod jar to disk"
+commands.allow = ["save_mod"]

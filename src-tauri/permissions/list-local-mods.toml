@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-list-local-mods"
+description = "Allows listing local mod jars in a directory"
+commands.allow = ["list_local_mods"]
