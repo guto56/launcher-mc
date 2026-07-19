@@ -55,10 +55,27 @@ function modCard(m, i) {
   </div>`;
 }
 
-export function renderMods(comparison) {
+export function renderMods(comparison, error) {
   const grid = document.getElementById('modGrid');
   const count = document.getElementById('modCount');
   if (!grid) return;
+
+  // Estado de erro: card vermelho persistente dentro da própria grid.
+  if (error) {
+    const msg = error && error.message ? error.message : String(error);
+    grid.innerHTML = `<div class="mod-card glass error-card reveal" style="--i:0">
+      <div class="mod-icon">⚠️</div>
+      <div class="mod-info">
+        <div class="mod-name">Erro ao carregar mods</div>
+        <div class="mod-meta">${escapeHtml(msg)}</div>
+        <div class="mod-meta" style="margin-top:6px;">Verifique sua conexão e clique em ↻ Atualizar.</div>
+      </div>
+    </div>`;
+    if (count) count.textContent = '';
+    observeReveals(grid);
+    return;
+  }
+
   if (!comparison.length) {
     grid.innerHTML = '<div class="empty-state">Nenhum mod exigido pelo servidor no momento.</div>';
   } else {
@@ -66,6 +83,22 @@ export function renderMods(comparison) {
   }
   if (count) count.textContent = `(${comparison.length})`;
   observeReveals(grid);
+}
+
+// --- Error box persistente (topo da página) ---
+
+export function showError(msg) {
+  const box = document.getElementById('errorBox');
+  if (!box) return;
+  box.textContent = msg;
+  box.style.display = 'block';
+}
+
+export function hideError() {
+  const box = document.getElementById('errorBox');
+  if (!box) return;
+  box.textContent = '';
+  box.style.display = 'none';
 }
 
 export function setDiffSummary(pending, total) {

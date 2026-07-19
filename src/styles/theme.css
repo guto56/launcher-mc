@@ -248,3 +248,28 @@ main {
 .toast.show { transform: translateX(-50%) translateY(0); }
 .toast.ok { color: var(--online); }
 .toast.err { color: var(--offline); }
+
+/* Error box persistente (topo) — não some como o toast */
+.error-box {
+  max-width: 1100px;
+  margin: 14px auto;
+  background: rgba(255, 60, 60, 0.12);
+  border: 1px solid #ff3c3c;
+  color: #ffb3b3;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 20px;
+  position: relative;
+  z-index: 1;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Card de erro dentro da grid de mods */
+.error-card {
+  border: 1px solid #ff3c3c;
+  background: rgba(255, 60, 60, 0.12);
+  box-shadow: 0 0 22px rgba(255, 60, 60, 0.25);
+}
+.error-card .mod-name { color: #ffb3b3; }
+.error-card .mod-meta { color: #ffc9c9; }

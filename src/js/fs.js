@@ -6,6 +6,8 @@
 // para que seja possível validar o build do frontend sem o binário nativo.
 // =============================================================================
 
+import { toast } from './ui.js';
+
 // Detecta se estamos dentro do Tauri.
 export function isTauri() {
   return typeof window !== 'undefined' && '__TAURI__' in window;
@@ -14,8 +16,16 @@ export function isTauri() {
 // Carrega o invoke do Tauri (v2) sob demanda.
 async function invoke(cmd, args) {
   if (isTauri()) {
-    const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
-    return tauriInvoke(cmd, args);
+    try {
+      const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
+      return await tauriInvoke(cmd, args);
+    } catch (e) {
+      const msg = e && e.message ? e.message : String(e);
+      console.error(`Falha ao chamar comando Tauri "${cmd}":`, e);
+      toast(`Erro na ponte do Tauri (${cmd}): ${msg}`, 'err');
+      // Re-lança para que o chamador exiba o erro no #errorBox/grid.
+      throw e;
+    }
   }
   // Fallback de desenvolvimento (não-Tauri): usa localStorage + fetch à API real.
   return devInvoke(cmd, args);

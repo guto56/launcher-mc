@@ -17,6 +17,8 @@ import {
   setProgress,
   toast,
   observeReveals,
+  showError,
+  hideError,
 } from './ui.js';
 
 // Estado global da sessão.
@@ -35,25 +37,35 @@ async function refreshStatus() {
 }
 
 async function loadAndCompare() {
-  if (!state.dir) return;
   try {
-    const [serverMods, localMods] = await Promise.all([
-      fetchServerMods(),
-      listLocalMods(state.dir),
-    ]);
+    // Sem pasta local detectada: lista os mods do servidor mesmo assim,
+    // tratando a lista local como vazia (todos aparecem como "faltando").
+    const tasks = [fetchServerMods()];
+    if (state.dir) tasks.push(listLocalMods(state.dir));
+    const results = await Promise.all(tasks);
+
+    const serverMods = results[0];
+    const localMods = state.dir ? results[1] : [];
+
     state.comparison = compareMods(serverMods, localMods);
     renderMods(state.comparison);
     const pending = pendingMods(state.comparison);
     setDiffSummary(pending.length, state.comparison.length);
     // Rótulo do botão muda conforme há algo a atualizar.
-    if (pending.length === 0) {
+    if (!state.dir) {
+      // Sem pasta local: não é possível gravar, desabilita com aviso explícito.
+      setInstallEnabled(false, 'Pasta não detectada');
+    } else if (pending.length === 0) {
       setInstallEnabled(state.comparison.length > 0, 'Tudo em dia');
     } else {
       const hasMissing = pending.some((m) => m.state === 'missing');
       setInstallEnabled(true, hasMissing ? 'Instalar tudo' : 'Atualizar');
     }
   } catch (e) {
-    toast('Falha ao comparar mods: ' + e.message, 'err');
+    console.error('Falha ao carregar/comparar mods:', e);
+    toast('Falha ao comparar mods: ' + (e && e.message ? e.message : e), 'err');
+    // Erro VISÍVEL e persistente na própria grid (não some como o toast).
+    renderMods([], e);
   }
 }
 
@@ -73,10 +85,15 @@ async function init() {
     const info = await detectModsDir();
     state.dir = info.path;
     setModsDir(info.path + (info.created ? ' (criada)' : ''));
+    hideError();
   } catch (e) {
-    setModsDir('ERRO: ' + e);
+    // Não aborta: continua para listar os mods do servidor mesmo sem pasta.
+    const msg = e && e.message ? e.message : String(e);
+    setModsDir('não detectada — erro');
+    showError('Não consegui detectar a pasta do Minecraft: ' + msg);
     toast('Não consegui detectar a pasta do Minecraft.', 'err');
-    return;
+    console.error('Falha ao detectar pasta de mods:', e);
+    // state.dir permanece null -> loadAndCompare lista só o servidor.
   }
 
   await refreshStatus();
