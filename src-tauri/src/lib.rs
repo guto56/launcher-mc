@@ -5,6 +5,7 @@ mod commands;
 mod download;
 
 use commands::*;
+use crate::download::download_mod;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

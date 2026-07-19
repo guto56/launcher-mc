@@ -4,11 +4,6 @@
 //! são gravados localmente via `save_mod`. Assim o binário baixa APENAS os mods
 //! que faltam/estão desatualizados (economia de banda vs. baixar o zip inteiro).
 
-use tauri::Manager;
-
-/// Baixa um mod individual e retorna seus bytes.
-/// `filename` é sanitizado com path.basename no backend do painel, mas reforçamos
-/// aqui também para nunca aceitar separadores de diretório.
 #[tauri::command]
 pub async fn download_mod(
     app: tauri::AppHandle,
