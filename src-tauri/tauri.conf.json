@@ -4,10 +4,10 @@
   "version": "1.0.0",
   "identifier": "xyz.centralchamados.launchermc",
   "build": {
-    "frontendDist": "dist",
+    "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeDevCommand": "cd .. && npm run dev",
+    "beforeBuildCommand": "cd .. && npm run build"
   },
   "app": {
     "windows": [
