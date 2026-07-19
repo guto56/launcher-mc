@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-server-mods"
+description = "Allows listing the server's required mods via the panel API"
+commands.allow = ["server_mods"]

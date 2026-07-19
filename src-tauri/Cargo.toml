@@ -1,7 +1,7 @@
 [package]
-name = "launcher-mc"
+name = "launcher-mac-silicon"
 version = "1.0.0"
-description = "Launcher multiplataforma para mods do servidor painel-mc"
+description = "Launcher macOS Silicon para mods do servidor"
 authors = ["painel-mc"]
 edition = "2021"
 rust-version = "1.77"
@@ -18,8 +18,7 @@ tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-reqwest = { version = "0.12", features = ["stream", "json"], default-features = false }
+reqwest = { version = "0.12", features = ["json"], default-features = false }
 tokio = { version = "1", features = ["full"] }
-futures-util = "0.3"
-dirs = "5"
 anyhow = "1"
+dirs = "5"

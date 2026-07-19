@@ -1,6 +1,3 @@
-//! Lib do Launcher MC (Tauri v2).
-//! Expõe os comandos Rust para a webview (frontend) e registra os plugins.
-
 mod commands;
 mod download;
 
@@ -22,5 +19,5 @@ pub fn run() {
             server_status,
         ])
         .run(tauri::generate_context!())
-        .expect("erro ao rodar o Launcher MC");
+        .expect("erro ao rodar o Launcher MC Silicon");
 }

@@ -1,7 +1,7 @@
 {
-  "name": "launcher-mc",
+  "name": "launcher-mac-silicon",
   "version": "1.0.0",
-  "description": "Launcher multiplataforma (Tauri) para instalar/atualizar mods do servidor painel-mc",
+  "description": "Launcher nativo macOS Silicon para instalar e atualizar mods do servidor",
   "type": "module",
   "private": true,
   "scripts": {

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "launcher-mc:default",
-  "description": "Capacidades padrão do Launcher MC (comandos locais + diálogo).",
+  "identifier": "launcher-mac-silicon:default",
+  "description": "Capacidades do Launcher MC Silicon.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -11,6 +11,8 @@
     "allow-save-mod",
     "allow-open-minecraft-folder",
     "allow-download-mod",
-    "allow-base-url"
+    "allow-base-url",
+    "allow-server-mods",
+    "allow-server-status"
   ]
 }

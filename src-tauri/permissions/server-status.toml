@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-server-status"
+description = "Allows querying the Minecraft server status via the panel API"
+commands.allow = ["server_status"]

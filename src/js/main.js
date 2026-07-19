@@ -1,27 +1,8 @@
-// =============================================================================
-// main.js — Bootstrap do Launcher MC.
-// Orquestra: detectar pasta -> listar local -> buscar servidor -> comparar ->
-// renderizar -> (botão) baixar seletivo -> progresso -> toast.
-// =============================================================================
-
 import { detectModsDir, listLocalMods, openMinecraftFolder, getBaseUrl } from './fs.js';
-import { fetchServerMods, fetchStatus, setApiBase } from './api.js';
+import { fetchServerMods, fetchStatus } from './api.js';
 import { compareMods, pendingMods, downloadPending } from './mods.js';
-import {
-  setStatus,
-  setModsDir,
-  renderMods,
-  setDiffSummary,
-  setInstallEnabled,
-  showProgress,
-  setProgress,
-  toast,
-  observeReveals,
-  showError,
-  hideError,
-} from './ui.js';
+import { setStatus, setModsDir, renderMods, setDiffSummary, setInstallEnabled, showProgress, setProgress, toast, showError, hideError } from './ui.js';
 
-// Estado global da sessão.
 const state = {
   dir: null,
   comparison: [],
@@ -29,136 +10,91 @@ const state = {
 
 async function refreshStatus() {
   try {
-    const s = await fetchStatus();
-    setStatus(s.running, s.playersOnline);
-  } catch (e) {
+    const status = await fetchStatus();
+    setStatus(status.running, status.playersOnline);
+  } catch {
     setStatus(false, null);
   }
 }
 
 async function loadAndCompare() {
   try {
-    // Sem pasta local detectada: lista os mods do servidor mesmo assim,
-    // tratando a lista local como vazia (todos aparecem como "faltando").
-    const tasks = [fetchServerMods()];
-    if (state.dir) tasks.push(listLocalMods(state.dir));
-    const results = await Promise.all(tasks);
-
-    const serverMods = results[0];
-    const localMods = state.dir ? results[1] : [];
-
+    const serverMods = await fetchServerMods();
+    const localMods = state.dir ? await listLocalMods(state.dir) : [];
     state.comparison = compareMods(serverMods, localMods);
     renderMods(state.comparison);
     const pending = pendingMods(state.comparison);
     setDiffSummary(pending.length, state.comparison.length);
-    // Rótulo do botão muda conforme há algo a atualizar.
+
     if (!state.dir) {
-      // Sem pasta local: não é possível gravar, desabilita com aviso explícito.
       setInstallEnabled(false, 'Pasta não detectada');
-    } else if (pending.length === 0) {
-      setInstallEnabled(state.comparison.length > 0, 'Tudo em dia');
+    } else if (!pending.length) {
+      setInstallEnabled(true, 'Tudo em dia');
     } else {
-      const hasMissing = pending.some((m) => m.state === 'missing');
-      setInstallEnabled(true, hasMissing ? 'Instalar tudo' : 'Atualizar');
+      setInstallEnabled(true, 'Atualizar mods');
     }
   } catch (e) {
-    console.error('Falha ao carregar/comparar mods:', e);
-    toast('Falha ao comparar mods: ' + (e && e.message ? e.message : e), 'err');
-    // Erro VISÍVEL e persistente na própria grid (não some como o toast).
     renderMods([], e);
+    toast('Falha ao carregar mods.', 'err');
+  }
+}
+
+async function onInstall() {
+  const pending = pendingMods(state.comparison);
+  if (!state.dir || !pending.length) return;
+
+  const btn = document.getElementById('installBtn');
+  if (btn) btn.disabled = true;
+
+  showProgress(true, `Baixando 0/${pending.length}`);
+  setProgress(0, pending.length);
+
+  try {
+    const { downloaded, failed } = await downloadPending(state.dir, pending, (done, total) => setProgress(done, total));
+    showProgress(false);
+    toast(failed.length ? `${downloaded} ok, ${failed.length} falharam` : `${downloaded} mod(s) atualizados`, failed.length ? 'err' : 'ok');
+    await loadAndCompare();
+  } catch (e) {
+    showProgress(false);
+    showError(String(e.message || e));
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
 async function init() {
-  // Ajusta a base da API conforme o comando Rust (ou env no dev).
   try {
     const base = await getBaseUrl();
-    if (base) setApiBase(base);
+    window.__LAUNCHER_API_BASE__ = base;
   } catch {
-    /* mantém default */
+    /* noop */
   }
 
-  observeReveals(document);
-
-  // 1) Detecta a pasta de mods.
   try {
     const info = await detectModsDir();
     state.dir = info.path;
-    setModsDir(info.path + (info.created ? ' (criada)' : ''));
+    setModsDir(info.path);
     hideError();
   } catch (e) {
-    // Não aborta: continua para listar os mods do servidor mesmo sem pasta.
-    const msg = e && e.message ? e.message : String(e);
-    setModsDir('não detectada — erro');
-    showError('Não consegui detectar a pasta do Minecraft: ' + msg);
-    toast('Não consegui detectar a pasta do Minecraft.', 'err');
-    console.error('Falha ao detectar pasta de mods:', e);
-    // state.dir permanece null -> loadAndCompare lista só o servidor.
+    state.dir = null;
+    setModsDir('não detectada');
+    showError(`Não consegui detectar a pasta de mods: ${e.message || e}`);
   }
 
   await refreshStatus();
   await loadAndCompare();
 
-  // Botões.
-  const installBtn = document.getElementById('installBtn');
-  if (installBtn) {
-    installBtn.addEventListener('click', onInstall);
-  }
-  const openBtn = document.getElementById('openFolderBtn');
-  if (openBtn) {
-    openBtn.addEventListener('click', async () => {
-      if (state.dir) {
-        try {
-          await openMinecraftFolder(state.dir);
-        } catch {
-          /* ignora */
-        }
-      }
-    });
-  }
-  const refreshBtn = document.getElementById('refreshBtn');
-  if (refreshBtn) {
-    refreshBtn.addEventListener('click', async () => {
-      await refreshStatus();
-      await loadAndCompare();
-      toast('Lista atualizada.', 'ok');
-    });
-  }
-
-  // Polling leve de status.
-  setInterval(refreshStatus, 8000);
-}
-
-async function onInstall() {
-  const pending = pendingMods(state.comparison);
-  if (!pending.length || !state.dir) return;
-
-  const installBtn = document.getElementById('installBtn');
-  if (installBtn) installBtn.disabled = true;
-  showProgress(true, `Baixando 0/${pending.length}…`);
-  setProgress(0, pending.length);
-
-  try {
-    const { downloaded, failed } = await downloadPending(
-      state.dir,
-      pending,
-      (done, total) => setProgress(done, total)
-    );
-    showProgress(false);
-    if (failed.length === 0) {
-      toast(`✅ ${downloaded} mod(s) instalado(s)!`, 'ok');
-    } else {
-      toast(`⚠️ ${downloaded} OK, ${failed.length} falharam.`, 'err');
-      console.error('Falhas:', failed);
-    }
-    // Re-compara para refletir o novo estado.
+  document.getElementById('installBtn')?.addEventListener('click', onInstall);
+  document.getElementById('refreshBtn')?.addEventListener('click', async () => {
+    await refreshStatus();
     await loadAndCompare();
-  } catch (e) {
-    showProgress(false);
-    toast('Erro no download: ' + e.message, 'err');
-  } finally {
-    if (installBtn) installBtn.disabled = false;
-  }
+    toast('Atualizado', 'ok');
+  });
+  document.getElementById('openFolderBtn')?.addEventListener('click', async () => {
+    if (state.dir) await openMinecraftFolder(state.dir);
+  });
+
+  setInterval(refreshStatus, 10000);
 }
 
 document.addEventListener('DOMContentLoaded', init);

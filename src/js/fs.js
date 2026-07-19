@@ -1,107 +1,19 @@
-// =============================================================================
-// fs.js — Ponte entre a UI (web) e os comandos Rust (Tauri).
-//
-// Em runtime Tauri: usa window.__TAURI__.core.invoke.
-// Em dev (navegador comum, rodando `npm run dev`): usa um fallback em memória
-// para que seja possível validar o build do frontend sem o binário nativo.
-// =============================================================================
-
 import { toast } from './ui.js';
 
-// Carrega o invoke do Tauri (v2) com prioridade para a API global do runtime,
-// que é a forma mais confiável dentro do app empacotado. Se não existir,
-// tentamos o import do pacote. No browser puro/dev fallback, caímos para
-// a implementação em memória/HTTP local.
 async function invoke(cmd, args) {
   const globalInvoke = globalThis.__TAURI__?.core?.invoke;
-  if (globalInvoke) {
-    return globalInvoke(cmd, args);
-  }
+  if (globalInvoke) return globalInvoke(cmd, args);
 
   try {
     const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
     return await tauriInvoke(cmd, args);
   } catch (e) {
     const msg = e && e.message ? e.message : String(e);
-    const isImportProblem =
-      e?.code === 'ERR_MODULE_NOT_FOUND' ||
-      /Cannot find module|Failed to fetch dynamically imported module|Loading chunk/i.test(msg);
-
-    if (isImportProblem) {
-      return devInvoke(cmd, args);
-    }
-
     console.error(`Falha ao chamar comando Tauri "${cmd}":`, e);
-    toast(`Erro na ponte do Tauri (${cmd}): ${msg}`, 'err');
-    // Re-lança para que o chamador exiba o erro no #errorBox/grid.
+    toast(`Erro no Tauri (${cmd}): ${msg}`, 'err');
     throw e;
   }
 }
-
-// ---------- Fallback de desenvolvimento (apenas para testar o build) ----------
-// Simula a pasta mods local num diretório virtual em localStorage, mas para a
-// listagem/escrita reais depende do binário. Aqui só garantimos que a UI não
-// quebra no browser. O caminho reportado é placeholder.
-const DEV_DIR_KEY = 'launcher_mc_dev_mods';
-function devLocalMods() {
-  try {
-    return JSON.parse(localStorage.getItem(DEV_DIR_KEY) || '[]');
-  } catch {
-    return [];
-  }
-}
-async function devInvoke(cmd, args) {
-  if (cmd === 'base_url') {
-    return window.__LAUNCHER_API_BASE__ || 'http://localhost:8080';
-  }
-  if (cmd === 'detect_mods_dir') {
-    return { path: '(dev) ~/.minecraft/mods', created: false, is_standard: true };
-  }
-  if (cmd === 'list_local_mods') {
-    return devLocalMods().map((m) => ({
-      file: m.file,
-      name: m.name,
-      version: m.version,
-      size: m.size || 0,
-    }));
-  }
-  if (cmd === 'save_mod') {
-    const local = devLocalMods();
-    local.push({ file: args.filename, version: '(local)', size: args.contents?.length || 0 });
-    localStorage.setItem(DEV_DIR_KEY, JSON.stringify(local));
-    return `(dev) saved ${args.filename}`;
-  }
-  if (cmd === 'open_minecraft_folder') {
-    return;
-  }
-  if (cmd === 'download_mod') {
-    // Em dev, baixa via fetch usando a base_url dev.
-    const base = window.__LAUNCHER_API_BASE__ || 'http://localhost:8080';
-    const res = await fetch(`${base}/api/mods/file/${encodeURIComponent(args.filename)}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const buf = await res.arrayBuffer();
-    return Array.from(new Uint8Array(buf));
-  }
-  if (cmd === 'server_mods') {
-    // Em dev, consulta a API real via fetch do navegador.
-    const base = window.__LAUNCHER_API_BASE__ || 'http://localhost:8080';
-    const res = await fetch(`${base}/api/mods`, { headers: { Accept: 'application/json' } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    return Array.isArray(data) ? data : data.mods || [];
-  }
-  if (cmd === 'server_status') {
-    const base = window.__LAUNCHER_API_BASE__ || 'http://localhost:8080';
-    const res = await fetch(`${base}/api/status`, { headers: { Accept: 'application/json' } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
-  }
-  throw new Error('Comando não suportado em modo dev: ' + cmd);
-}
-
-// ---------------------------------------------------------------------------
-// API pública usada pelos outros módulos JS.
-// ---------------------------------------------------------------------------
 
 export async function detectModsDir() {
   return invoke('detect_mods_dir');
@@ -127,12 +39,10 @@ export async function getBaseUrl() {
   return invoke('base_url');
 }
 
-// Consulta a lista de mods do servidor via comando Rust (server_mods).
 export async function serverMods() {
   return invoke('server_mods');
 }
 
-// Consulta o status do servidor via comando Rust (server_status).
 export async function serverStatus() {
   return invoke('server_status');
 }
