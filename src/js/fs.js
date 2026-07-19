@@ -8,27 +8,34 @@
 
 import { toast } from './ui.js';
 
-// Detecta se estamos dentro do Tauri.
-export function isTauri() {
-  return typeof window !== 'undefined' && '__TAURI__' in window;
-}
-
-// Carrega o invoke do Tauri (v2) sob demanda.
+// Carrega o invoke do Tauri (v2) com prioridade para a API global do runtime,
+// que é a forma mais confiável dentro do app empacotado. Se não existir,
+// tentamos o import do pacote. No browser puro/dev fallback, caímos para
+// a implementação em memória/HTTP local.
 async function invoke(cmd, args) {
-  if (isTauri()) {
-    try {
-      const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
-      return await tauriInvoke(cmd, args);
-    } catch (e) {
-      const msg = e && e.message ? e.message : String(e);
-      console.error(`Falha ao chamar comando Tauri "${cmd}":`, e);
-      toast(`Erro na ponte do Tauri (${cmd}): ${msg}`, 'err');
-      // Re-lança para que o chamador exiba o erro no #errorBox/grid.
-      throw e;
-    }
+  const globalInvoke = globalThis.__TAURI__?.core?.invoke;
+  if (globalInvoke) {
+    return globalInvoke(cmd, args);
   }
-  // Fallback de desenvolvimento (não-Tauri): usa localStorage + fetch à API real.
-  return devInvoke(cmd, args);
+
+  try {
+    const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
+    return await tauriInvoke(cmd, args);
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    const isImportProblem =
+      e?.code === 'ERR_MODULE_NOT_FOUND' ||
+      /Cannot find module|Failed to fetch dynamically imported module|Loading chunk/i.test(msg);
+
+    if (isImportProblem) {
+      return devInvoke(cmd, args);
+    }
+
+    console.error(`Falha ao chamar comando Tauri "${cmd}":`, e);
+    toast(`Erro na ponte do Tauri (${cmd}): ${msg}`, 'err');
+    // Re-lança para que o chamador exiba o erro no #errorBox/grid.
+    throw e;
+  }
 }
 
 // ---------- Fallback de desenvolvimento (apenas para testar o build) ----------
