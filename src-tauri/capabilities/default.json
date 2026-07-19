@@ -6,11 +6,11 @@
   "permissions": [
     "core:default",
     "dialog:default",
-    "launcher-mc:allow-detect-mods-dir",
-    "launcher-mc:allow-list-local-mods",
-    "launcher-mc:allow-save-mod",
-    "launcher-mc:allow-open-minecraft-folder",
-    "launcher-mc:allow-download-mod",
-    "launcher-mc:allow-base-url"
+    "launcher_mc_lib:allow-detect-mods-dir",
+    "launcher_mc_lib:allow-list-local-mods",
+    "launcher_mc_lib:allow-save-mod",
+    "launcher_mc_lib:allow-open-minecraft-folder",
+    "launcher_mc_lib:allow-download-mod",
+    "launcher_mc_lib:allow-base-url"
   ]
 }
