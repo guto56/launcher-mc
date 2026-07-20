@@ -114,3 +114,28 @@ export function renderMods(comparison, error) {
   }
   if (count) count.textContent = `(${comparison.length})`;
 }
+
+export function setHomeStats(status) {
+  const v = document.getElementById('statVersion');
+  const p = document.getElementById('statPlayers');
+  const m = document.getElementById('statMotd');
+  if (v) v.textContent = status.version || '—';
+  if (p) p.textContent = status.playersMax ? `${status.playersOnline}/${status.playersMax}` : `${status.playersOnline ?? 0}`;
+  if (m) m.textContent = status.motd || '—';
+}
+
+export function revealHome() {
+  const home = document.getElementById('home');
+  if (!home) return;
+  home.classList.add('reveal-on');
+  // Revela os elementos .reveal dentro da home (escalonados).
+  home.querySelectorAll('.reveal').forEach((el) => el.classList.add('in'));
+}
+
+export function showHome() {
+  const home = document.getElementById('home');
+  const wizard = document.getElementById('wizard');
+  if (wizard) wizard.hidden = true;
+  if (home) home.hidden = false;
+  revealHome();
+}

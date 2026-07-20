@@ -716,3 +716,152 @@ pub async fn launch_minecraft(profile: String) -> Result<String, String> {
         Err("Launch não suportado no Linux (ambiente de desenvolvimento).".to_string())
     }
 }
+
+// =============================================================================
+// Wizard de primeira execução: detecção do launcher instalado.
+//
+// IMPORTANTE (regra do owner): NÃO checamos se a instalação é "original" e
+// NÃO bloqueamos nenhum launcher. Aceitamos oficial, TLauncher ou outro. Só
+// reportamos se o Minecraft está instalado (para orientar a instalação) e se
+// há Java (necessário pro Forge 1.20.1).
+// =============================================================================
+
+/// Informações sobre o launcher Minecraft instalado, para o wizard.
+#[derive(Debug, Clone, Serialize)]
+pub struct LauncherInfo {
+    /// true se o Minecraft (qualquer launcher) está instalado.
+    pub minecraft_installed: bool,
+    /// "official" | "tlauncher" | "other" | "none".
+    pub launcher: String,
+    /// true se o Java (necessário pro Forge) foi encontrado.
+    pub java_present: bool,
+    /// Texto amigável para a UI (ex.: caminho ou dica de instalação).
+    pub notes: String,
+}
+
+/// Detecta o launcher Minecraft instalado (sem julgar "originalidade").
+#[tauri::command]
+pub fn detect_launcher() -> LauncherInfo {
+    #[cfg(target_os = "macos")]
+    {
+        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"));
+
+        // 1) Minecraft.app oficial.
+        if Path::new("/Applications/Minecraft.app").exists() {
+            return LauncherInfo {
+                minecraft_installed: true,
+                launcher: "official".to_string(),
+                java_present: java_present(),
+                notes: "Minecraft Launcher oficial detectado em /Applications/Minecraft.app".to_string(),
+            };
+        }
+        // 2) TLauncher (pasta de dados ou app).
+        let tl_data = home.join("Library/Application Support/tlauncher");
+        let tl_app = Path::new("/Applications/TLauncher.app");
+        if tl_data.exists() || tl_app.exists() {
+            return LauncherInfo {
+                minecraft_installed: true,
+                launcher: "tlauncher".to_string(),
+                java_present: java_present(),
+                notes: "TLauncher detectado.".to_string(),
+            };
+        }
+        // 3) Outro launcher (ex.: MultiMC/Prism) — pasta .minecraft existe?
+        let mc_data = home.join("Library/Application Support/minecraft");
+        if mc_data.exists() {
+            return LauncherInfo {
+                minecraft_installed: true,
+                launcher: "other".to_string(),
+                java_present: java_present(),
+                notes: "Outro launcher detectado (pasta .minecraft presente).".to_string(),
+            };
+        }
+        LauncherInfo {
+            minecraft_installed: false,
+            launcher: "none".to_string(),
+            java_present: java_present(),
+            notes: "Nenhum Minecraft encontrado. Instale o Minecraft Launcher (official ou TLauncher) para continuar.".to_string(),
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // 1) Minecraft Launcher oficial (caminhos conhecidos ou `where`).
+        let official_candidates = [
+            "C:/Program Files (x86)/Minecraft Launcher/MinecraftLauncher.exe",
+            "C:/Program Files/Minecraft Launcher/MinecraftLauncher.exe",
+            "C:/XboxGames/Minecraft Launcher/Content/Minecraft.exe",
+        ];
+        let official = official_candidates.iter().any(|c| Path::new(c).is_file())
+            || std::process::Command::new("where")
+                .arg("MinecraftLauncher.exe")
+                .output()
+                .map(|o| o.status.success() && !String::from_utf8_lossy(&o.stdout).trim().is_empty())
+                .unwrap_or(false);
+
+        if official {
+            return LauncherInfo {
+                minecraft_installed: true,
+                launcher: "official".to_string(),
+                java_present: java_present(),
+                notes: "Minecraft Launcher oficial detectado.".to_string(),
+            };
+        }
+
+        // 2) TLauncher (pasta AppData ou atalho).
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            let tl = PathBuf::from(&appdata).join("tlauncher");
+            let tl_data = PathBuf::from(&appdata).join(".tlauncher");
+            if tl.exists() || tl_data.exists() {
+                return LauncherInfo {
+                    minecraft_installed: true,
+                    launcher: "tlauncher".to_string(),
+                    java_present: java_present(),
+                    notes: "TLauncher detectado.".to_string(),
+                };
+            }
+        }
+
+        // 3) Outro launcher — pasta .minecraft existe?
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            let mc = PathBuf::from(&appdata).join(".minecraft");
+            if mc.exists() {
+                return LauncherInfo {
+                    minecraft_installed: true,
+                    launcher: "other".to_string(),
+                    java_present: java_present(),
+                    notes: "Outro launcher detectado (pasta .minecraft presente).".to_string(),
+                };
+            }
+        }
+
+        LauncherInfo {
+            minecraft_installed: false,
+            launcher: "none".to_string(),
+            java_present: java_present(),
+            notes: "Nenhum Minecraft encontrado. Instale o Minecraft Launcher (official ou TLauncher) para continuar.".to_string(),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Ambiente de dev/container: reporta "other" se houver .minecraft.
+        let mc = dirs::data_dir().map(|d| d.join(".minecraft"));
+        if let Some(p) = mc {
+            if p.exists() {
+                return LauncherInfo {
+                    minecraft_installed: true,
+                    launcher: "other".to_string(),
+                    java_present: java_present(),
+                    notes: "Pasta .minecraft detectada (ambiente Linux).".to_string(),
+                };
+            }
+        }
+        LauncherInfo {
+            minecraft_installed: false,
+            launcher: "none".to_string(),
+            java_present: java_present(),
+            notes: "Nenhum Minecraft encontrado neste ambiente.".to_string(),
+        }
+    }
+}

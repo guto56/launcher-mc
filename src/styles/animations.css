@@ -1,8 +1,8 @@
 /* =========================================================================
-   Launcher MC — Animações / Reveal (Intersection Observer) + parallax
+   Nexus Launcher — Animações (splash, wizard, home-reveal, parallax)
    ========================================================================= */
 
-/* Reveal: elementos com .reveal entram suavemente ao aparecer na viewport. */
+/* --- Reveal: elementos com .reveal entram suavemente (escalonado por --i) --- */
 .reveal {
   opacity: 0;
   transform: translateY(28px);
@@ -11,9 +11,141 @@
 }
 .reveal.in { opacity: 1; transform: none; }
 
+/* --- Splah de entrada --- */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at top, #251340 0%, #0b0612 60%);
+  animation: splash-in .5s ease both;
+}
+.splash-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  text-align: center;
+  animation: splash-pop .6s cubic-bezier(.2,.8,.2,1) both;
+}
+.splash-logo img {
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(124, 58, 237, 0.45);
+}
+.splash-title {
+  font-size: 30px;
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+.splash-spinner {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 3px solid rgba(196, 181, 253, 0.2);
+  border-top-color: var(--accent, #c4b5fd);
+  animation: splash-spin .9s linear infinite;
+}
+/* Estado final: sai com fade + scale-down */
+.splash.hide {
+  animation: splash-out .55s ease forwards;
+  pointer-events: none;
+}
+
+@keyframes splash-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes splash-pop {
+  from { opacity: 0; transform: scale(.85) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes splash-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes splash-out {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(1.06); visibility: hidden; }
+}
+
+/* --- Wizard: passos entram com slide+fade --- */
+.wizard-step {
+  animation: wizard-step-in .45s cubic-bezier(.2,.7,.2,1) both;
+}
+.wizard-step.out {
+  animation: wizard-step-out .3s ease forwards;
+}
+@keyframes wizard-step-in {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes wizard-step-out {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(-28px); }
+}
+
+/* --- Barra de progresso do wizard --- */
+.wizard-progress {
+  height: 6px;
+  width: 100%;
+  background: rgba(255,255,255,0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+.wizard-progress-bar {
+  height: 100%;
+  width: 20%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-2, #8b5cf6), var(--accent, #c4b5fd));
+  transition: width .4s ease;
+  animation: step-progress 1.2s ease-in-out infinite;
+}
+@keyframes step-progress {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.25); }
+}
+
+/* --- Check de concluído (passo 5) --- */
+.wizard-done { text-align: center; }
+.done-check {
+  width: 72px;
+  height: 72px;
+  margin: 6px auto 14px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 38px;
+  color: #0b0612;
+  background: linear-gradient(135deg, var(--ok, #4ade80), #a7f3d0);
+  box-shadow: 0 0 30px rgba(74, 222, 128, 0.5);
+  animation: done-pop .5s cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes done-pop {
+  from { opacity: 0; transform: scale(.4); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* --- Home reveal (escalonado) --- */
+.home.reveal-on { animation: home-reveal .6s ease both; }
+@keyframes home-reveal {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Respeitar prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .reveal { transition: none; opacity: 1; transform: none; }
+  .splash { animation: none; }
+  .splash-logo { animation: none; }
+  .splash-spinner { animation: none; }
+  .wizard-step { animation: none; }
+  .wizard-step.out { animation: none; }
+  .wizard-progress-bar { animation: none; }
+  .done-check { animation: none; }
+  .home.reveal-on { animation: none; }
   .status-badge.online .dot { animation: none; }
   .progress-fill { animation: none; }
 }

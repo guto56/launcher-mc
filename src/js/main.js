@@ -1,18 +1,22 @@
-import { detectModsDir, listLocalMods, openMinecraftFolder, getBaseUrl, ensureForge, launchMinecraft } from './fs.js';
+import { detectModsDir, listLocalMods, openMinecraftFolder, getBaseUrl, ensureForge, launchMinecraft, detectLauncher } from './fs.js';
 import { fetchServerMods, fetchStatus } from './api.js';
 import { compareMods, pendingMods, downloadPending } from './mods.js';
-import { setStatus, setModsDir, renderMods, setDiffSummary, setInstallEnabled, showProgress, setProgress, toast, showError, hideError, setPlayStatus } from './ui.js';
+import { setStatus, setHomeStats, setModsDir, renderMods, setDiffSummary, setInstallEnabled, showProgress, setProgress, toast, showError, hideError, setPlayStatus, showHome } from './ui.js';
+import { hideSplash } from './splash.js';
+import { isOnboarded, startWizard } from './wizard.js';
 
 const state = {
   dir: null,
   comparison: [],
   version: '1.20.1',
+  onboarded: false,
 };
 
 async function refreshStatus() {
   try {
     const status = await fetchStatus();
     setStatus(status.running, status.playersOnline);
+    setHomeStats(status);
     if (status.version) state.version = status.version;
   } catch {
     setStatus(false, null);
@@ -93,13 +97,26 @@ async function onPlay() {
   }
 }
 
+function wireHomeButtons() {
+  document.getElementById('installBtn')?.addEventListener('click', onInstall);
+  document.getElementById('playBtn')?.addEventListener('click', onPlay);
+  document.getElementById('refreshBtn')?.addEventListener('click', async () => {
+    await refreshStatus();
+    await loadAndCompare();
+    toast('Atualizado', 'ok');
+  });
+  document.getElementById('openFolderBtn')?.addEventListener('click', async () => {
+    if (state.dir) await openMinecraftFolder(state.dir);
+  });
+}
+
 async function init() {
+  wireHomeButtons();
+
   try {
     const base = await getBaseUrl();
     window.__LAUNCHER_API_BASE__ = base;
-  } catch {
-    /* noop */
-  }
+  } catch { /* noop */ }
 
   try {
     const info = await detectModsDir();
@@ -112,20 +129,29 @@ async function init() {
     showError(`Não consegui detectar a pasta de mods: ${e.message || e}`);
   }
 
+  // Define o fluxo: wizard (1ª vez) ou home direto.
+  state.onboarded = isOnboarded();
+
+  if (!state.onboarded) {
+    await startWizard({
+      dir: state.dir,
+      onFinish: async () => {
+        showHome();
+        finishBoot();
+      },
+    });
+    // Esconde o splash assim que o wizard está montado.
+    hideSplash();
+  } else {
+    showHome();
+    finishBoot();
+    hideSplash();
+  }
+}
+
+async function finishBoot() {
   await refreshStatus();
   await loadAndCompare();
-
-  document.getElementById('installBtn')?.addEventListener('click', onInstall);
-  document.getElementById('playBtn')?.addEventListener('click', onPlay);
-  document.getElementById('refreshBtn')?.addEventListener('click', async () => {
-    await refreshStatus();
-    await loadAndCompare();
-    toast('Atualizado', 'ok');
-  });
-  document.getElementById('openFolderBtn')?.addEventListener('click', async () => {
-    if (state.dir) await openMinecraftFolder(state.dir);
-  });
-
   setInterval(refreshStatus, 10000);
 }
 

@@ -3,53 +3,162 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Launcher MC Silicon</title>
+  <title>Nexus Launcher</title>
   <link rel="stylesheet" href="./styles/theme.css" />
+  <link rel="stylesheet" href="./styles/animations.css" />
+  <link rel="stylesheet" href="./styles/glass.css" />
 </head>
 <body>
-  <main class="app-shell">
-    <header class="topbar card">
-      <div>
-        <h1>Launcher MC Silicon</h1>
-        <p>Apple Silicon only · mods sob demanda</p>
+  <!-- ============================================================ -->
+  <!-- SPLASH: overlay animado na entrada, fade/scale-out no boot. -->
+  <!-- ============================================================ -->
+  <div id="splash" class="splash">
+    <div class="splash-logo">
+      <img src="./icons/128x128.png" alt="Nexus Launcher" width="128" height="128" />
+      <h1 class="splash-title">Nexus Launcher</h1>
+      <div class="splash-spinner" aria-hidden="true"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- WIZARD: primeir execução (5 passos). Escondido se já onboarded. -->
+  <!-- ============================================================ -->
+  <div id="wizard" class="wizard" hidden>
+    <div class="wizard-card glass">
+      <div class="wizard-progress" id="wizardProgress">
+        <div class="wizard-progress-bar" id="wizardProgressBar"></div>
+      </div>
+      <div class="wizard-steps" id="wizardSteps">
+        <!-- Passo 1: launcher -->
+        <section class="wizard-step" data-step="1">
+          <h2>Passo 1 · Launcher Minecraft</h2>
+          <p class="muted">Vamos preparar o Nexus Launcher. Primeiro, qual launcher do Minecraft você usa?</p>
+          <div id="wizardStep1Body" class="wizard-body">
+            <p class="muted" id="detectStatus">Detectando…</p>
+          </div>
+          <p id="step1Note" class="note"></p>
+        </section>
+
+        <!-- Passo 2: versão -->
+        <section class="wizard-step" data-step="2" hidden>
+          <h2>Passo 2 · Versão do servidor</h2>
+          <p class="muted">O servidor roda <strong>Forge 1.20.1-47.4.21</strong>. Vamos conferir a versão atual.</p>
+          <div id="wizardStep2Body" class="wizard-body">
+            <p class="muted" id="versionStatus">Verificando…</p>
+          </div>
+        </section>
+
+        <!-- Passo 3: mods -->
+        <section class="wizard-step" data-step="3" hidden>
+          <h2>Passo 3 · Mods do servidor</h2>
+          <p class="muted">Baixando os mods que faltam na sua pasta.</p>
+          <div id="wizardStep3Body" class="wizard-body">
+            <p class="muted" id="modsStatus">Verificando mods…</p>
+          </div>
+          <div id="progressWrap" class="progress-card" style="display:none">
+            <div class="progress-head">
+              <span id="progressLabel">Baixando…</span>
+              <span id="progressPct">0%</span>
+            </div>
+            <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+          </div>
+        </section>
+
+        <!-- Passo 4: Forge -->
+        <section class="wizard-step" data-step="4" hidden>
+          <h2>Passo 4 · Forge</h2>
+          <p class="muted">Garantindo o perfil Forge 1.20.1 instalado (idempotente).</p>
+          <div id="wizardStep4Body" class="wizard-body">
+            <p class="muted" id="forgeStatus">Preparando Forge…</p>
+          </div>
+        </section>
+
+        <!-- Passo 5: concluído -->
+        <section class="wizard-step" data-step="5" hidden>
+          <h2>Passo 5 · Pronto!</h2>
+          <div class="wizard-done">
+            <div class="done-check" aria-hidden="true">✓</div>
+            <p>Tudo configurado. Resumo:</p>
+            <ul id="wizardSummary" class="wizard-summary"></ul>
+          </div>
+        </section>
+      </div>
+
+      <div class="wizard-actions">
+        <button id="wizardBack" class="btn" disabled>Voltar</button>
+        <button id="wizardNext" class="btn primary" disabled>Próximo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- HOME: logo + stats + mods + mapa BlueMap embutido.          -->
+  <!-- ============================================================ -->
+  <main id="home" class="app-shell home" hidden>
+    <header class="home-top reveal">
+      <div class="home-brand">
+        <img src="./icons/128x128.png" alt="Nexus Launcher" class="home-logo" width="64" height="64" />
+        <div>
+          <h1>Nexus Launcher</h1>
+          <p class="muted">Forge 1.20.1 · mods sob demanda</p>
+        </div>
       </div>
       <div class="status-row">
         <span id="statusBadge" class="badge"><span class="dot"></span><span id="statusText">…</span></span>
         <span id="playersText" class="muted"></span>
+        <button id="refreshBtn" class="btn">Atualizar</button>
       </div>
-      <button id="refreshBtn" class="btn">Atualizar</button>
     </header>
 
-    <section class="card hero">
-      <div>
-        <h2>Pasta detectada</h2>
-        <p id="modsDirPath" class="code">detectando…</p>
-      </div>
-      <div class="actions">
-        <button id="playBtn" class="btn primary">▶ Jogar</button>
-        <button id="installBtn" class="btn primary" disabled>Atualizar mods</button>
-        <button id="openFolderBtn" class="btn">Abrir pasta</button>
-      </div>
-      <p id="playStatus" class="muted"></p>
-      <p id="diffSummary" class="muted"></p>
-    </section>
+    <section class="home-grid">
+      <!-- Esquerda: stats + mapa -->
+      <div class="home-left">
+        <section class="card reveal" style="--i:1">
+          <h2>Status do servidor</h2>
+          <div id="homeStats" class="home-stats">
+            <div class="stat"><span class="muted">Versão</span><strong id="statVersion">—</strong></div>
+            <div class="stat"><span class="muted">Jogadores</span><strong id="statPlayers">—</strong></div>
+            <div class="stat"><span class="muted">MOTD</span><strong id="statMotd">—</strong></div>
+          </div>
+        </section>
 
-    <section id="progressWrap" class="card progress-card" style="display:none">
-      <div class="progress-head">
-        <span id="progressLabel">Baixando…</span>
-        <span id="progressPct">0%</span>
+        <section class="card reveal glass" style="--i:2">
+          <h2>Mapa do servidor</h2>
+          <div class="map-wrap">
+            <iframe
+              class="map-frame"
+              src="https://map.centralchamados.xyz"
+              title="Mapa BlueMap do servidor Nexus"
+              loading="lazy"
+              allow="fullscreen"
+            ></iframe>
+          </div>
+        </section>
       </div>
-      <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
-    </section>
 
-    <section class="card">
-      <h2>Mods do servidor <small id="modCount"></small></h2>
-      <div id="modGrid" class="mod-grid"></div>
+      <!-- Direita: mods + ações -->
+      <div class="home-right">
+        <section class="card reveal" style="--i:1">
+          <h2>Mods <small id="modCount"></small></h2>
+          <div id="modGrid" class="mod-grid"></div>
+        </section>
+
+        <section class="card reveal" style="--i:2">
+          <div class="home-actions">
+            <button id="playBtn" class="btn primary">▶ Jogar</button>
+            <button id="installBtn" class="btn primary" disabled>Atualizar mods</button>
+            <button id="openFolderBtn" class="btn">Abrir pasta</button>
+          </div>
+          <p id="playStatus" class="muted"></p>
+          <p id="diffSummary" class="muted"></p>
+        </section>
+      </div>
     </section>
   </main>
 
   <div id="errorBox" class="error-box" style="display:none"></div>
   <div id="toast" class="toast"></div>
+
   <script type="module" src="./js/main.js"></script>
 </body>
 </html>

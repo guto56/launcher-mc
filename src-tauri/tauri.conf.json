@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; img-src 'self' https://map.centralchamados.xyz data:; connect-src 'self' ipc: http://ipc.localhost; frame-src 'self' https://map.centralchamados.xyz; child-src 'self' https://map.centralchamados.xyz; style-src 'self' 'unsafe-inline'"
     }
   },
   "bundle": {

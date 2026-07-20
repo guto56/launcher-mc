@@ -15,6 +15,7 @@
     "allow-server-mods",
     "allow-server-status",
     "allow-ensure-forge",
-    "allow-launch-minecraft"
+    "allow-launch-minecraft",
+    "allow-detect-launcher"
   ]
 }

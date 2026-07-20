@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-detect-launcher"
+description = "Allows detecting the installed Minecraft launcher (official/tlauncher/other/none)"
+commands.allow = ["detect_launcher"]
