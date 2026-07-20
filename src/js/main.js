@@ -1,17 +1,19 @@
-import { detectModsDir, listLocalMods, openMinecraftFolder, getBaseUrl } from './fs.js';
+import { detectModsDir, listLocalMods, openMinecraftFolder, getBaseUrl, ensureFabric, launchMinecraft } from './fs.js';
 import { fetchServerMods, fetchStatus } from './api.js';
 import { compareMods, pendingMods, downloadPending } from './mods.js';
-import { setStatus, setModsDir, renderMods, setDiffSummary, setInstallEnabled, showProgress, setProgress, toast, showError, hideError } from './ui.js';
+import { setStatus, setModsDir, renderMods, setDiffSummary, setInstallEnabled, showProgress, setProgress, toast, showError, hideError, setPlayStatus } from './ui.js';
 
 const state = {
   dir: null,
   comparison: [],
+  version: '1.20.1',
 };
 
 async function refreshStatus() {
   try {
     const status = await fetchStatus();
     setStatus(status.running, status.playersOnline);
+    if (status.version) state.version = status.version;
   } catch {
     setStatus(false, null);
   }
@@ -62,6 +64,35 @@ async function onInstall() {
   }
 }
 
+async function onPlay() {
+  const btn = document.getElementById('playBtn');
+  if (btn) btn.disabled = true;
+  hideError();
+  try {
+    setPlayStatus('Verificando/instalando Fabric…');
+    const status = await ensureFabric(state.version);
+    if (!status.java_present) {
+      setPlayStatus('Java não encontrado. Instale o Java 17+ (Adoptium/Temurin) e tente de novo.');
+      showError('Java não encontrado. Instale o Java 17+ (Adoptium/Temurin) e tente de novo.');
+      return;
+    }
+    if (!status.installed) {
+      setPlayStatus(status.message || 'Não foi possível preparar o Fabric.');
+      showError('Erro ao preparar o Fabric: ' + (status.message || 'desconhecido'));
+      return;
+    }
+    setPlayStatus(`Fabric pronto (${status.profile}). Abrindo Minecraft…`);
+    await launchMinecraft(status.profile);
+    setPlayStatus('Minecraft aberto no perfil Fabric. Clique em Play no launcher.');
+    toast('Minecraft aberto no perfil Fabric', 'ok');
+  } catch (e) {
+    setPlayStatus('');
+    showError('Erro ao jogar: ' + (e && e.message ? e.message : String(e)));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function init() {
   try {
     const base = await getBaseUrl();
@@ -85,6 +116,7 @@ async function init() {
   await loadAndCompare();
 
   document.getElementById('installBtn')?.addEventListener('click', onInstall);
+  document.getElementById('playBtn')?.addEventListener('click', onPlay);
   document.getElementById('refreshBtn')?.addEventListener('click', async () => {
     await refreshStatus();
     await loadAndCompare();

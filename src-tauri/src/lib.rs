@@ -17,6 +17,8 @@ pub fn run() {
             base_url,
             server_mods,
             server_status,
+            ensure_fabric,
+            launch_minecraft,
         ])
         .run(tauri::generate_context!())
         .expect("erro ao rodar o Launcher MC Silicon");

@@ -32,6 +32,9 @@ pub struct ModsDirInfo {
     pub is_standard: bool,
 }
 
+/// Versão estável do Fabric Installer (confirmada em maven.fabricmc.net).
+const FABRIC_INSTALLER_VERSION: &str = "1.1.2";
+
 /// URL base da API do painel (configurável via env LAUNCHER_API_BASE).
 fn api_base() -> String {
     std::env::var("LAUNCHER_API_BASE")
@@ -347,4 +350,363 @@ pub async fn server_status() -> Result<ServerStatus, String> {
     resp.json::<ServerStatus>()
         .await
         .map_err(|e| format!("Falha ao parsear JSON de /api/status: {e}"))
+}
+
+// =============================================================================
+// "Clicar e jogar": instalação automática do Fabric + launch do Minecraft.
+//
+// - `ensure_fabric(version)` -> baixa/roda o Fabric Installer (idempotente),
+//   mescla o perfil no launcher_profiles.json (sem sobrescrever perfis do
+//   usuário; faz backup antes) e retorna FabricStatus.
+// - `launch_minecraft(profile)` -> marca o perfil como selecionado e abre o
+//   Minecraft Launcher oficial (spawn, não bloqueia).
+// =============================================================================
+
+/// Status da instalação do Fabric (retornado ao frontend).
+#[derive(Debug, Clone, Serialize)]
+pub struct FabricStatus {
+    /// true se o perfil Fabric existe agora em versions/.
+    pub installed: bool,
+    /// Nome da pasta/perfil Fabric (ex.: "fabric-loader-0.16.14-1.20.1").
+    pub profile: String,
+    /// false => Java ausente; frontend deve orientar instalação.
+    pub java_present: bool,
+    /// Mensagem amigável de status.
+    pub message: String,
+}
+
+/// Resolve a pasta raiz `.minecraft` conforme o SO.
+/// Windows: %APPDATA%/.minecraft ; macOS: ~/Library/Application Support/minecraft
+fn minecraft_root_dir() -> Option<PathBuf> {
+    if cfg!(target_os = "windows") {
+        std::env::var("APPDATA")
+            .ok()
+            .map(|appdata| PathBuf::from(appdata).join(".minecraft"))
+    } else if cfg!(target_os = "macos") {
+        dirs::data_dir().map(|d| d.join("minecraft"))
+    } else {
+        // Linux (dev): fallback padrão.
+        dirs::data_dir().map(|d| d.join(".minecraft"))
+    }
+}
+
+/// Verifica se o Java está disponível (roda `java -version`).
+fn java_present() -> bool {
+    which_java()
+        .map(|java| {
+            std::process::Command::new(&java)
+                .arg("-version")
+                .output()
+                .map(|o| o.status.success() || !o.stderr.is_empty())
+                .unwrap_or(false)
+        })
+        .unwrap_or(false)
+}
+
+/// Localiza o executável do Java. Tenta o PATH e caminhos comuns no Windows.
+fn which_java() -> Option<String> {
+    // 1) java no PATH
+    if std::process::Command::new("java")
+        .arg("-version")
+        .output()
+        .map(|o| o.status.success() || !o.stderr.is_empty())
+        .unwrap_or(false)
+    {
+        return Some("java".to_string());
+    }
+
+    // 2) Windows: procurar em Program Files/Java/*/bin/java.exe
+    #[cfg(target_os = "windows")]
+    {
+        for base in [
+            "C:/Program Files/Java",
+            "C:/Program Files/Eclipse Adoptium",
+            "C:/Program Files (x86)/Java",
+        ] {
+            if let Ok(read) = std::fs::read_dir(base) {
+                for entry in read.flatten() {
+                    let cand = entry.path().join("bin").join("java.exe");
+                    if cand.is_file() {
+                        return Some(cand.to_string_lossy().to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Procura em `.minecraft/versions/` uma pasta cujo nome contenha `fabric` e a
+/// versão pedida (ex.: `1.20.1`). Retorna o nome da pasta se existir.
+fn find_fabric_version_dir(minecraft_dir: &Path, version: &str) -> Option<String> {
+    let versions = minecraft_dir.join("versions");
+    let read = std::fs::read_dir(&versions).ok()?;
+    for entry in read.flatten() {
+        if !entry.path().is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        let lower = name.to_lowercase();
+        if lower.contains("fabric") && name.contains(version) {
+            return Some(name);
+        }
+    }
+    None
+}
+
+/// Mescla/atualiza o `launcher_profiles.json`, definindo o perfil Fabric como
+/// selecionado, SEM sobrescrever perfis existentes do usuário. Faz backup antes.
+fn upsert_launcher_profile(minecraft_dir: &Path, profile_id: &str) -> Result<(), String> {
+    let path = minecraft_dir.join("launcher_profiles.json");
+
+    // Carrega o JSON existente (ou cria um objeto vazio).
+    let mut root: serde_json::Value = if path.is_file() {
+        let raw = std::fs::read_to_string(&path)
+            .map_err(|e| format!("Falha ao ler launcher_profiles.json: {e}"))?;
+        // Backup antes de alterar.
+        let backup = minecraft_dir.join("launcher_profiles.json.nexus-bak");
+        let _ = std::fs::write(&backup, &raw);
+        serde_json::from_str(&raw).unwrap_or_else(|_| serde_json::json!({}))
+    } else {
+        std::fs::create_dir_all(minecraft_dir)
+            .map_err(|e| format!("Falha ao criar pasta .minecraft: {e}"))?;
+        serde_json::json!({})
+    };
+
+    if !root.is_object() {
+        root = serde_json::json!({});
+    }
+    let obj = root.as_object_mut().unwrap();
+
+    // Garante o mapa "profiles".
+    let profiles = obj
+        .entry("profiles".to_string())
+        .or_insert_with(|| serde_json::json!({}));
+    if !profiles.is_object() {
+        *profiles = serde_json::json!({});
+    }
+    let profiles_obj = profiles.as_object_mut().unwrap();
+
+    // Adiciona/atualiza APENAS o perfil Nexus Fabric (não toca nos outros).
+    let now = "1970-01-01T00:00:00.000Z";
+    let entry = profiles_obj
+        .entry(profile_id.to_string())
+        .or_insert_with(|| {
+            serde_json::json!({
+                "type": "custom",
+                "name": "Nexus Fabric 1.20.1",
+                "created": now,
+                "lastUsed": now,
+            })
+        });
+    if let Some(e) = entry.as_object_mut() {
+        e.insert(
+            "lastVersionId".to_string(),
+            serde_json::Value::String(profile_id.to_string()),
+        );
+        if !e.contains_key("name") {
+            e.insert(
+                "name".to_string(),
+                serde_json::Value::String("Nexus Fabric 1.20.1".to_string()),
+            );
+        }
+        if !e.contains_key("type") {
+            e.insert(
+                "type".to_string(),
+                serde_json::Value::String("custom".to_string()),
+            );
+        }
+    }
+
+    // Marca como selecionado (chaves usadas por diferentes versões do launcher).
+    obj.insert(
+        "selectedProfile".to_string(),
+        serde_json::Value::String(profile_id.to_string()),
+    );
+    obj.insert(
+        "lastVersionId".to_string(),
+        serde_json::Value::String(profile_id.to_string()),
+    );
+
+    let out = serde_json::to_string_pretty(&root)
+        .map_err(|e| format!("Falha ao serializar launcher_profiles.json: {e}"))?;
+    std::fs::write(&path, out)
+        .map_err(|e| format!("Falha ao gravar launcher_profiles.json: {e}"))?;
+    Ok(())
+}
+
+/// Garante que o Fabric <version> está instalado. Idempotente.
+#[tauri::command]
+pub async fn ensure_fabric(version: String) -> Result<FabricStatus, String> {
+    let version = if version.trim().is_empty() {
+        "1.20.1".to_string()
+    } else {
+        version.trim().to_string()
+    };
+
+    let minecraft_dir = minecraft_root_dir()
+        .ok_or_else(|| "Não foi possível resolver a pasta .minecraft neste SO.".to_string())?;
+
+    // 1) Já instalado? -> garante perfil e retorna.
+    if let Some(profile) = find_fabric_version_dir(&minecraft_dir, &version) {
+        let _ = upsert_launcher_profile(&minecraft_dir, &profile);
+        return Ok(FabricStatus {
+            installed: true,
+            profile,
+            java_present: java_present(),
+            message: format!("Fabric {version} já instalado."),
+        });
+    }
+
+    // 2) Java presente?
+    if !java_present() {
+        return Ok(FabricStatus {
+            installed: false,
+            profile: String::new(),
+            java_present: false,
+            message:
+                "Java não encontrado. Instale o Java 17+ (Adoptium/Temurin) e tente de novo."
+                    .to_string(),
+        });
+    }
+    let java = which_java().unwrap_or_else(|| "java".to_string());
+
+    // 3) Baixa o fabric-installer.jar oficial (padrão reqwest do download.rs).
+    let installer_url = format!(
+        "https://maven.fabricmc.net/net/fabricmc/fabric-installer/{v}/fabric-installer-{v}.jar",
+        v = FABRIC_INSTALLER_VERSION
+    );
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|e| format!("Falha ao criar cliente HTTP: {e}"))?;
+    let resp = client
+        .get(&installer_url)
+        .header("User-Agent", "LauncherMC/1.0 (Tauri)")
+        .send()
+        .await
+        .map_err(|e| format!("Falha ao baixar o Fabric Installer: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!(
+            "HTTP {} ao baixar o Fabric Installer.",
+            resp.status()
+        ));
+    }
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("Falha ao ler o Fabric Installer: {e}"))?;
+
+    let tmp_dir = std::env::temp_dir();
+    let installer_path = tmp_dir.join(format!(
+        "fabric-installer-{}.jar",
+        FABRIC_INSTALLER_VERSION
+    ));
+    std::fs::write(&installer_path, &bytes)
+        .map_err(|e| format!("Falha ao gravar o Fabric Installer: {e}"))?;
+
+    // 4) Roda o installer em modo client (baixa o Minecraft base também).
+    let output = std::process::Command::new(&java)
+        .arg("-jar")
+        .arg(&installer_path)
+        .arg("client")
+        .arg("-mcversion")
+        .arg(&version)
+        .arg("-downloadMinecraft")
+        .output()
+        .map_err(|e| format!("Falha ao executar o Fabric Installer: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "Fabric Installer falhou: {}",
+            stderr.trim()
+        ));
+    }
+
+    // 5) Descobre a pasta criada em versions/ e cria/mescla o perfil.
+    let profile = find_fabric_version_dir(&minecraft_dir, &version).ok_or_else(|| {
+        "Instalação concluída mas o perfil Fabric não foi encontrado em versions/.".to_string()
+    })?;
+    upsert_launcher_profile(&minecraft_dir, &profile)?;
+
+    Ok(FabricStatus {
+        installed: true,
+        profile,
+        java_present: true,
+        message: format!("Fabric {version} pronto."),
+    })
+}
+
+/// Localiza o executável do Minecraft Launcher (Windows).
+#[cfg(target_os = "windows")]
+fn find_minecraft_launcher() -> Option<PathBuf> {
+    let candidates = [
+        "C:/Program Files (x86)/Minecraft Launcher/MinecraftLauncher.exe",
+        "C:/Program Files/Minecraft Launcher/MinecraftLauncher.exe",
+        "C:/XboxGames/Minecraft Launcher/Content/Minecraft.exe",
+    ];
+    for c in candidates {
+        let p = PathBuf::from(c);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    // `where MinecraftLauncher.exe`
+    if let Ok(out) = std::process::Command::new("where")
+        .arg("MinecraftLauncher.exe")
+        .output()
+    {
+        if out.status.success() {
+            if let Some(line) = String::from_utf8_lossy(&out.stdout).lines().next() {
+                let p = PathBuf::from(line.trim());
+                if p.is_file() {
+                    return Some(p);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Marca o perfil como selecionado e abre o Minecraft Launcher (não bloqueia).
+#[tauri::command]
+pub async fn launch_minecraft(profile: String) -> Result<String, String> {
+    let minecraft_dir = minecraft_root_dir()
+        .ok_or_else(|| "Não foi possível resolver a pasta .minecraft neste SO.".to_string())?;
+
+    // Garante que o perfil recebido está selecionado no launcher_profiles.json.
+    if !profile.trim().is_empty() {
+        let _ = upsert_launcher_profile(&minecraft_dir, profile.trim());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let exe = find_minecraft_launcher()
+            .ok_or_else(|| "Minecraft Launcher não instalado.".to_string())?;
+        std::process::Command::new(&exe)
+            .spawn()
+            .map_err(|e| format!("Falha ao abrir o Minecraft Launcher: {e}"))?;
+        return Ok("launched".to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // Tenta abrir /Applications/Minecraft.app; fallback para -a Minecraft.
+        let app_path = "/Applications/Minecraft.app";
+        let spawn = if Path::new(app_path).exists() {
+            std::process::Command::new("open").arg("-n").arg(app_path).spawn()
+        } else {
+            std::process::Command::new("open").arg("-a").arg("Minecraft").spawn()
+        };
+        spawn.map_err(|e| format!("Falha ao abrir o Minecraft: {e}. Instale o Minecraft Launcher."))?;
+        return Ok("launched".to_string());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Ambiente de dev/container: não há Minecraft Launcher.
+        let _ = &minecraft_dir;
+        Err("Launch não suportado no Linux (ambiente de desenvolvimento).".to_string())
+    }
 }

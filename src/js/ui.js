@@ -33,6 +33,11 @@ export function setDiffSummary(pending, total) {
   el.textContent = total ? `${pending}/${total} precisam de ação` : '';
 }
 
+export function setPlayStatus(msg) {
+  const el = document.getElementById('playStatus');
+  if (el) el.textContent = msg || '';
+}
+
 export function setInstallEnabled(enabled, label) {
   const btn = document.getElementById('installBtn');
   if (!btn) return;

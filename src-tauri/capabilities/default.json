@@ -13,6 +13,8 @@
     "allow-download-mod",
     "allow-base-url",
     "allow-server-mods",
-    "allow-server-status"
+    "allow-server-status",
+    "allow-ensure-fabric",
+    "allow-launch-minecraft"
   ]
 }
