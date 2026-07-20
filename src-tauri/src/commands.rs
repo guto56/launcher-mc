@@ -32,8 +32,17 @@ pub struct ModsDirInfo {
     pub is_standard: bool,
 }
 
-/// Versão estável do Fabric Installer (confirmada em maven.fabricmc.net).
-const FABRIC_INSTALLER_VERSION: &str = "1.1.2";
+/// Versão do Forge (mcversion-forgeversion), confirmada no servidor.
+const FORGE_VERSION: &str = "1.20.1-47.4.21";
+
+/// URL base do installer do Forge (maven.minecraftforge.net).
+/// `{ver}` é substituído por `FORGE_VERSION` (ex.: 1.20.1-47.4.21).
+fn forge_installer_url() -> String {
+    format!(
+        "https://maven.minecraftforge.net/net/minecraftforge/forge/{ver}/forge-{ver}-installer.jar",
+        ver = FORGE_VERSION
+    )
+}
 
 /// URL base da API do painel (configurável via env LAUNCHER_API_BASE).
 fn api_base() -> String {
@@ -353,21 +362,21 @@ pub async fn server_status() -> Result<ServerStatus, String> {
 }
 
 // =============================================================================
-// "Clicar e jogar": instalação automática do Fabric + launch do Minecraft.
+// "Clicar e jogar": instalação automática do Forge + launch do Minecraft.
 //
-// - `ensure_fabric(version)` -> baixa/roda o Fabric Installer (idempotente),
+// - `ensure_forge(version)` -> baixa/roda o Forge Installer (idempotente),
 //   mescla o perfil no launcher_profiles.json (sem sobrescrever perfis do
-//   usuário; faz backup antes) e retorna FabricStatus.
+//   usuário; faz backup antes) e retorna LoaderStatus.
 // - `launch_minecraft(profile)` -> marca o perfil como selecionado e abre o
 //   Minecraft Launcher oficial (spawn, não bloqueia).
 // =============================================================================
 
-/// Status da instalação do Fabric (retornado ao frontend).
+/// Status da instalação do loader (Fabric/Forge) retornado ao frontend.
 #[derive(Debug, Clone, Serialize)]
-pub struct FabricStatus {
-    /// true se o perfil Fabric existe agora em versions/.
+pub struct LoaderStatus {
+    /// true se o perfil do loader existe agora em versions/.
     pub installed: bool,
-    /// Nome da pasta/perfil Fabric (ex.: "fabric-loader-0.16.14-1.20.1").
+    /// Nome da pasta/perfil (ex.: "1.20.1-forge-47.4.21").
     pub profile: String,
     /// false => Java ausente; frontend deve orientar instalação.
     pub java_present: bool,
@@ -437,9 +446,10 @@ fn which_java() -> Option<String> {
     None
 }
 
-/// Procura em `.minecraft/versions/` uma pasta cujo nome contenha `fabric` e a
-/// versão pedida (ex.: `1.20.1`). Retorna o nome da pasta se existir.
-fn find_fabric_version_dir(minecraft_dir: &Path, version: &str) -> Option<String> {
+/// Procura em `.minecraft/versions/` uma pasta cujo nome contenha `forge` e a
+/// versão pedida (ex.: `1.20.1`). Retorna o nome da pasta se existir
+/// (ex.: "1.20.1-forge-47.4.21").
+fn find_forge_version_dir(minecraft_dir: &Path, version: &str) -> Option<String> {
     let versions = minecraft_dir.join("versions");
     let read = std::fs::read_dir(&versions).ok()?;
     for entry in read.flatten() {
@@ -448,14 +458,14 @@ fn find_fabric_version_dir(minecraft_dir: &Path, version: &str) -> Option<String
         }
         let name = entry.file_name().to_string_lossy().to_string();
         let lower = name.to_lowercase();
-        if lower.contains("fabric") && name.contains(version) {
+        if lower.contains("forge") && name.contains(version) {
             return Some(name);
         }
     }
     None
 }
 
-/// Mescla/atualiza o `launcher_profiles.json`, definindo o perfil Fabric como
+/// Mescla/atualiza o `launcher_profiles.json`, definindo o perfil Forge como
 /// selecionado, SEM sobrescrever perfis existentes do usuário. Faz backup antes.
 fn upsert_launcher_profile(minecraft_dir: &Path, profile_id: &str) -> Result<(), String> {
     let path = minecraft_dir.join("launcher_profiles.json");
@@ -488,14 +498,14 @@ fn upsert_launcher_profile(minecraft_dir: &Path, profile_id: &str) -> Result<(),
     }
     let profiles_obj = profiles.as_object_mut().unwrap();
 
-    // Adiciona/atualiza APENAS o perfil Nexus Fabric (não toca nos outros).
+    // Adiciona/atualiza APENAS o perfil Nexus Forge (não toca nos outros).
     let now = "1970-01-01T00:00:00.000Z";
     let entry = profiles_obj
         .entry(profile_id.to_string())
         .or_insert_with(|| {
             serde_json::json!({
                 "type": "custom",
-                "name": "Nexus Fabric 1.20.1",
+                "name": "Nexus Forge 1.20.1",
                 "created": now,
                 "lastUsed": now,
             })
@@ -508,7 +518,7 @@ fn upsert_launcher_profile(minecraft_dir: &Path, profile_id: &str) -> Result<(),
         if !e.contains_key("name") {
             e.insert(
                 "name".to_string(),
-                serde_json::Value::String("Nexus Fabric 1.20.1".to_string()),
+                serde_json::Value::String("Nexus Forge 1.20.1".to_string()),
             );
         }
         if !e.contains_key("type") {
@@ -536,9 +546,9 @@ fn upsert_launcher_profile(minecraft_dir: &Path, profile_id: &str) -> Result<(),
     Ok(())
 }
 
-/// Garante que o Fabric <version> está instalado. Idempotente.
+/// Garante que o Forge <version> está instalado. Idempotente.
 #[tauri::command]
-pub async fn ensure_fabric(version: String) -> Result<FabricStatus, String> {
+pub async fn ensure_forge(version: String) -> Result<LoaderStatus, String> {
     let version = if version.trim().is_empty() {
         "1.20.1".to_string()
     } else {
@@ -549,34 +559,31 @@ pub async fn ensure_fabric(version: String) -> Result<FabricStatus, String> {
         .ok_or_else(|| "Não foi possível resolver a pasta .minecraft neste SO.".to_string())?;
 
     // 1) Já instalado? -> garante perfil e retorna.
-    if let Some(profile) = find_fabric_version_dir(&minecraft_dir, &version) {
+    if let Some(profile) = find_forge_version_dir(&minecraft_dir, &version) {
         let _ = upsert_launcher_profile(&minecraft_dir, &profile);
-        return Ok(FabricStatus {
+        return Ok(LoaderStatus {
             installed: true,
             profile,
             java_present: java_present(),
-            message: format!("Fabric {version} já instalado."),
+            message: format!("Forge {version} já instalado."),
         });
     }
 
-    // 2) Java presente?
+    // 2) Java presente? (Forge 1.20.1 roda em Java 21; BlueMap exige Java 21)
     if !java_present() {
-        return Ok(FabricStatus {
+        return Ok(LoaderStatus {
             installed: false,
             profile: String::new(),
             java_present: false,
             message:
-                "Java não encontrado. Instale o Java 17+ (Adoptium/Temurin) e tente de novo."
+                "Java não encontrado. Instale o Java 21+ (Adoptium/Temurin) e tente de novo."
                     .to_string(),
         });
     }
     let java = which_java().unwrap_or_else(|| "java".to_string());
 
-    // 3) Baixa o fabric-installer.jar oficial (padrão reqwest do download.rs).
-    let installer_url = format!(
-        "https://maven.fabricmc.net/net/fabricmc/fabric-installer/{v}/fabric-installer-{v}.jar",
-        v = FABRIC_INSTALLER_VERSION
-    );
+    // 3) Baixa o forge-installer.jar oficial (padrão reqwest do download.rs).
+    let installer_url = forge_installer_url();
     let client = reqwest::Client::builder()
         .build()
         .map_err(|e| format!("Falha ao criar cliente HTTP: {e}"))?;
@@ -585,56 +592,55 @@ pub async fn ensure_fabric(version: String) -> Result<FabricStatus, String> {
         .header("User-Agent", "LauncherMC/1.0 (Tauri)")
         .send()
         .await
-        .map_err(|e| format!("Falha ao baixar o Fabric Installer: {e}"))?;
+        .map_err(|e| format!("Falha ao baixar o Forge Installer: {e}"))?;
     if !resp.status().is_success() {
         return Err(format!(
-            "HTTP {} ao baixar o Fabric Installer.",
+            "HTTP {} ao baixar o Forge Installer.",
             resp.status()
         ));
     }
     let bytes = resp
         .bytes()
         .await
-        .map_err(|e| format!("Falha ao ler o Fabric Installer: {e}"))?;
+        .map_err(|e| format!("Falha ao ler o Forge Installer: {e}"))?;
 
     let tmp_dir = std::env::temp_dir();
-    let installer_path = tmp_dir.join(format!(
-        "fabric-installer-{}.jar",
-        FABRIC_INSTALLER_VERSION
-    ));
+    let installer_path = tmp_dir.join(format!("forge-installer-{}.jar", FORGE_VERSION));
     std::fs::write(&installer_path, &bytes)
-        .map_err(|e| format!("Falha ao gravar o Fabric Installer: {e}"))?;
+        .map_err(|e| format!("Falha ao gravar o Forge Installer: {e}"))?;
 
-    // 4) Roda o installer em modo client (baixa o Minecraft base também).
+    // 4) Roda o installer em modo client (headless, sem GUI). Passamos
+    //    `--installClient` para que ele crie a pasta
+    //    versions/1.20.1-forge-47.4.21 + o perfil no launcher_profiles.json
+    //    de forma não-interativa. O installer já sabe a versão a partir do
+    //    próprio nome ("forge-1.20.1-47.4.21-installer.jar"); NÃO passamos
+    //    `-downloadMinecraft` (o launcher baixa o jogo sob demanda).
     let output = std::process::Command::new(&java)
         .arg("-jar")
         .arg(&installer_path)
-        .arg("client")
-        .arg("-mcversion")
-        .arg(&version)
-        .arg("-downloadMinecraft")
+        .arg("--installClient")
         .output()
-        .map_err(|e| format!("Falha ao executar o Fabric Installer: {e}"))?;
+        .map_err(|e| format!("Falha ao executar o Forge Installer: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!(
-            "Fabric Installer falhou: {}",
+            "Forge Installer falhou: {}",
             stderr.trim()
         ));
     }
 
     // 5) Descobre a pasta criada em versions/ e cria/mescla o perfil.
-    let profile = find_fabric_version_dir(&minecraft_dir, &version).ok_or_else(|| {
-        "Instalação concluída mas o perfil Fabric não foi encontrado em versions/.".to_string()
+    let profile = find_forge_version_dir(&minecraft_dir, &version).ok_or_else(|| {
+        "Instalação concluída mas o perfil Forge não foi encontrado em versions/.".to_string()
     })?;
     upsert_launcher_profile(&minecraft_dir, &profile)?;
 
-    Ok(FabricStatus {
+    Ok(LoaderStatus {
         installed: true,
         profile,
         java_present: true,
-        message: format!("Fabric {version} pronto."),
+        message: format!("Forge {version} pronto."),
     })
 }
 

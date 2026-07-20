@@ -1,4 +1,0 @@
-[[permission]]
-identifier = "allow-ensure-fabric"
-description = "Allows installing/ensuring Fabric for the requested Minecraft version"
-commands.allow = ["ensure_fabric"]

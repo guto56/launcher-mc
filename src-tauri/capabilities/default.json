@@ -14,7 +14,7 @@
     "allow-base-url",
     "allow-server-mods",
     "allow-server-status",
-    "allow-ensure-fabric",
+    "allow-ensure-forge",
     "allow-launch-minecraft"
   ]
 }

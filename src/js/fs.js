@@ -47,8 +47,8 @@ export async function serverStatus() {
   return invoke('server_status');
 }
 
-export async function ensureFabric(version) {
-  return invoke('ensure_fabric', { version });
+export async function ensureForge(version) {
+  return invoke('ensure_forge', { version });
 }
 
 export async function launchMinecraft(profile) {

@@ -17,7 +17,7 @@ pub fn run() {
             base_url,
             server_mods,
             server_status,
-            ensure_fabric,
+            ensure_forge,
             launch_minecraft,
         ])
         .run(tauri::generate_context!())

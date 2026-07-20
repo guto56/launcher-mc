@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-ensure-forge"
+description = "Allows installing/ensuring Forge for the requested Minecraft version"
+commands.allow = ["ensure_forge"]
