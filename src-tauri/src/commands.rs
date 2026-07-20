@@ -636,10 +636,28 @@ pub async fn ensure_forge(version: String) -> Result<LoaderStatus, String> {
         .map_err(|e| format!("Falha ao executar o Forge Installer: {e}"))?;
 
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let code = output.status.code().unwrap_or(-1);
+        let log_path = tmp_dir.join(format!("forge-installer-{}.jar.log", FORGE_VERSION));
+        let log_tail = if log_path.is_file() {
+            match std::fs::read_to_string(&log_path) {
+                Ok(s) => {
+                    let lines: Vec<&str> = s.lines().collect();
+                    let start = lines.len().saturating_sub(60);
+                    lines[start..].join("\n")
+                }
+                Err(_) => String::new(),
+            }
+        } else {
+            String::new()
+        };
         return Err(format!(
-            "Forge Installer falhou: {}",
-            stderr.trim()
+            "Forge Installer falhou (exit {}):\n{}\n--- stdout ---\n{}\n--- log do installer ---\n{}",
+            code,
+            if stderr.trim().is_empty() { "(vazio)" } else { stderr.trim() },
+            if stdout.trim().is_empty() { "(vazio)" } else { stdout.trim() },
+            if log_tail.trim().is_empty() { "(não encontrado)" } else { log_tail.trim() }
         ));
     }
 
