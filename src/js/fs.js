@@ -51,8 +51,8 @@ export async function ensureForge(version) {
   return invoke('ensure_forge', { version });
 }
 
-export async function launchMinecraft(profile) {
-  return invoke('launch_minecraft', { profile });
+export async function launchMinecraft(profile, launcher) {
+  return invoke('launch_minecraft', { profile, launcher });
 }
 
 export async function detectLauncher() {

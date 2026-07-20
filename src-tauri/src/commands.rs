@@ -384,6 +384,18 @@ pub struct LoaderStatus {
     pub message: String,
 }
 
+/// Resultado do `launch_minecraft`, para o frontend decidir a mensagem.
+#[derive(Debug, Clone, Serialize)]
+pub struct LaunchResult {
+    /// "official" | "tlauncher" | "other".
+    pub launcher: String,
+    /// true => launcher sem API de perfil (TLauncher/outro): mostrar aviso
+    /// para selecionar "Nexus Forge 1.20.1" manualmente.
+    pub needs_version_select: bool,
+    /// Mensagem amigável de status.
+    pub message: String,
+}
+
 /// Resolve a pasta raiz `.minecraft` conforme o SO.
 /// Windows: %APPDATA%/.minecraft ; macOS: ~/Library/Application Support/minecraft
 fn minecraft_root_dir() -> Option<PathBuf> {
@@ -675,44 +687,155 @@ fn find_minecraft_launcher() -> Option<PathBuf> {
     None
 }
 
-/// Marca o perfil como selecionado e abre o Minecraft Launcher (não bloqueia).
+/// Localiza o executável do TLauncher (Windows). Espelho do
+/// `find_minecraft_launcher`, mas para o TLauncher (não usa
+/// launcher_profiles.json — sem API de perfil).
+#[cfg(target_os = "windows")]
+fn find_tlauncher() -> Option<PathBuf> {
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        let candidates = [
+            PathBuf::from(&appdata).join("tlauncher").join("TLauncher.exe"),
+            PathBuf::from(&appdata).join(".tlauncher").join("TLauncher.exe"),
+            PathBuf::from(&appdata).join("tlauncher").join("tlauncher.exe"),
+        ];
+        for c in candidates {
+            if c.is_file() {
+                return Some(c);
+            }
+        }
+    }
+    // `where TLauncher.exe`
+    if let Ok(out) = std::process::Command::new("where").arg("TLauncher.exe").output() {
+        if out.status.success() {
+            if let Some(line) = String::from_utf8_lossy(&out.stdout).lines().next() {
+                let p = PathBuf::from(line.trim());
+                if p.is_file() {
+                    return Some(p);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Abre o Minecraft (na versão Forge 1.20.1) usando o launcher detectado.
+///
+/// - `profile`: nome do perfil Forge (ex.: "1.20.1-forge-47.4.21").
+/// - `launcher`: "official" | "tlauncher" | "other" | "none" | "" (re-detecta).
+///
+/// Não bloqueia (spawn). Respeita cfg(target_os) macos/windows/linux.
+/// TLauncher/outro NÃO usam launcher_profiles.json — apenas abrem o binário
+/// e sinalizam `needs_version_select` para o frontend orientar o usuário.
 #[tauri::command]
-pub async fn launch_minecraft(profile: String) -> Result<String, String> {
+pub async fn launch_minecraft(profile: String, launcher: String) -> Result<LaunchResult, String> {
+    // Launcher vazio => re-detecta via detect_launcher() interno.
+    let launcher = if launcher.trim().is_empty() {
+        detect_launcher().launcher
+    } else {
+        launcher.trim().to_string()
+    };
+
+    if launcher == "none" {
+        return Err("Minecraft não instalado, instale o launcher".to_string());
+    }
+
     let minecraft_dir = minecraft_root_dir()
         .ok_or_else(|| "Não foi possível resolver a pasta .minecraft neste SO.".to_string())?;
 
-    // Garante que o perfil recebido está selecionado no launcher_profiles.json.
-    if !profile.trim().is_empty() {
-        let _ = upsert_launcher_profile(&minecraft_dir, profile.trim());
-    }
+    let chosen = launcher; // "official" | "tlauncher" | "other" | desconhecido
+    let profile_arg = profile.trim();
 
     #[cfg(target_os = "windows")]
     {
-        let exe = find_minecraft_launcher()
-            .ok_or_else(|| "Minecraft Launcher não instalado.".to_string())?;
-        std::process::Command::new(&exe)
-            .spawn()
-            .map_err(|e| format!("Falha ao abrir o Minecraft Launcher: {e}"))?;
-        return Ok("launched".to_string());
+        // Escolhe o binário conforme o launcher. "other" tenta oficial e cai
+        // em TLauncher; TLauncher/outro NÃO usam launcher_profiles.json.
+        let (exe, label, needs): (Option<PathBuf>, &str, bool) = match chosen.as_str() {
+            "official" => (find_minecraft_launcher(), "official", false),
+            "tlauncher" => (find_tlauncher(), "tlauncher", true),
+            _ => match (find_minecraft_launcher(), find_tlauncher()) {
+                (Some(e), _) => (Some(e), "official", false),
+                (None, t) => (t, "tlauncher", true),
+            },
+        };
+        if let Some(exe) = exe {
+            if label == "official" && !profile_arg.is_empty() {
+                let _ = upsert_launcher_profile(&minecraft_dir, profile_arg);
+            }
+            std::process::Command::new(&exe)
+                .spawn()
+                .map_err(|e| format!("Falha ao abrir o launcher: {e}"))?;
+            return Ok(LaunchResult {
+                launcher: label.to_string(),
+                needs_version_select: needs,
+                message: "launched".to_string(),
+            });
+        }
+        return Err("Minecraft não instalado, instale o launcher".to_string());
     }
 
     #[cfg(target_os = "macos")]
     {
-        // Tenta abrir /Applications/Minecraft.app; fallback para -a Minecraft.
-        let app_path = "/Applications/Minecraft.app";
-        let spawn = if Path::new(app_path).exists() {
-            std::process::Command::new("open").arg("-n").arg(app_path).spawn()
-        } else {
-            std::process::Command::new("open").arg("-a").arg("Minecraft").spawn()
+        let label: &str;
+        let needs: bool;
+        let spawn = match chosen.as_str() {
+            "official" => {
+                label = "official";
+                needs = false;
+                let app = "/Applications/Minecraft.app";
+                if Path::new(app).exists() {
+                    std::process::Command::new("open").arg("-n").arg(app).spawn()
+                } else {
+                    std::process::Command::new("open").arg("-a").arg("Minecraft").spawn()
+                }
+            }
+            "tlauncher" => {
+                label = "tlauncher";
+                needs = true;
+                let app = "/Applications/TLauncher.app";
+                if Path::new(app).exists() {
+                    std::process::Command::new("open").arg("-n").arg(app).spawn()
+                } else {
+                    std::process::Command::new("open").arg("-a").arg("TLauncher").spawn()
+                }
+            }
+            _ => {
+                // "other": tenta TLauncher, depois Minecraft oficial (fallback).
+                if Path::new("/Applications/TLauncher.app").exists() {
+                    label = "tlauncher";
+                    needs = true;
+                    std::process::Command::new("open")
+                        .arg("-n")
+                        .arg("/Applications/TLauncher.app")
+                        .spawn()
+                } else {
+                    label = "official";
+                    needs = false;
+                    let app = "/Applications/Minecraft.app";
+                    if Path::new(app).exists() {
+                        std::process::Command::new("open").arg("-n").arg(app).spawn()
+                    } else {
+                        std::process::Command::new("open").arg("-a").arg("Minecraft").spawn()
+                    }
+                }
+            }
         };
-        spawn.map_err(|e| format!("Falha ao abrir o Minecraft: {e}. Instale o Minecraft Launcher."))?;
-        return Ok("launched".to_string());
+        spawn
+            .map_err(|e| format!("Falha ao abrir o Minecraft: {e}. Instale o Minecraft Launcher."))?;
+        if label == "official" && !profile_arg.is_empty() {
+            let _ = upsert_launcher_profile(&minecraft_dir, profile_arg);
+        }
+        return Ok(LaunchResult {
+            launcher: label.to_string(),
+            needs_version_select: needs,
+            message: "launched".to_string(),
+        });
     }
 
     #[cfg(target_os = "linux")]
     {
-        // Ambiente de dev/container: não há Minecraft Launcher.
         let _ = &minecraft_dir;
+        let _ = &profile;
+        // Ambiente de dev/container: não há launcher gráfico. Reporta erro honesto.
         Err("Launch não suportado no Linux (ambiente de desenvolvimento).".to_string())
     }
 }

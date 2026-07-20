@@ -85,10 +85,20 @@ async function onPlay() {
       showError('Erro ao preparar o Forge: ' + (status.message || 'desconhecido'));
       return;
     }
+    // Resolve o launcher: usa o do wizard (state.launcher) ou re-detecta.
+    const launcher = (window.__NEXUS_LAUNCHER__ && window.__NEXUS_LAUNCHER__.launcher)
+      || (state.launcher && state.launcher.launcher)
+      || '';
     setPlayStatus(`Forge pronto (${status.profile}). Abrindo Minecraft…`);
-    await launchMinecraft(status.profile);
-    setPlayStatus('Minecraft aberto no perfil Forge. Clique em Play no launcher.');
-    toast('Minecraft aberto no perfil Forge', 'ok');
+    const res = await launchMinecraft(status.profile, launcher);
+    if (res.needs_version_select) {
+      const msg = 'Selecione a versão "Nexus Forge 1.20.1" no launcher e clique em Play';
+      setPlayStatus(msg);
+      toast(msg, 'ok');
+    } else {
+      setPlayStatus('Minecraft aberto no perfil Forge. Clique em Play no launcher.');
+      toast('Minecraft aberto no perfil Forge', 'ok');
+    }
   } catch (e) {
     setPlayStatus('');
     showError('Erro ao jogar: ' + (e && e.message ? e.message : String(e)));
