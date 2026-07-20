@@ -631,6 +631,7 @@ pub async fn ensure_forge(version: String) -> Result<LoaderStatus, String> {
         .arg("-jar")
         .arg(&installer_path)
         .arg("--installClient")
+        .current_dir(tmp_dir.clone())
         .output()
         .map_err(|e| format!("Falha ao executar o Forge Installer: {e}"))?;
 
