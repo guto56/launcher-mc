@@ -42,49 +42,19 @@ jobs:
           curl -fsSL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-Windows-MinGW-w64-Portable-${PRISM_VERSION}.zip" -o /tmp/prism-win.zip
           (cd src-tauri/resources/prism/win && unzip -q /tmp/prism-win.zip && mv */* . 2>/dev/null || true)
 
-      - name: Baixar artefatos do Forge (universal.jar + libraries)
+      - name: Baixar artefatos do Forge (installer)
         run: |
           set -euo pipefail
-          mkdir -p /tmp/forgebuild/.minecraft/libraries
-          # Forge universal (jar principal)
-          curl -fsSL "https://maven.minecraftforge.net/net/minecraftforge/universal/1.20.1-47.4.21/universal-1.20.1-47.4.21.jar" -o /tmp/forge-universal.jar
-          # Libraries do Forge (via meta API do Forge)
-          python3 << 'PY'
-          import json,subprocess,os,sys,urllib.request
-          ver = "1.20.1-47.4.21"
-          # Meta do Forge (retorna libraries + mainClass + jvm args)
-          url = f"https://maven.minecraftforge.net/net/minecraftforge/forge/{ver}/forge-{ver}-installer.json"
-          # Se não achar, tenta o endpoint antigo do meta
-          try:
-              with urllib.request.urlopen(url, timeout=30) as r:
-                  meta = json.loads(r.read())
-          except:
-              meta = {"libraries": []}
-          libs = meta.get("libraries", [])
-          out_dir = "/tmp/forgebuild/.minecraft/libraries"
-          os.makedirs(out_dir, exist_ok=True)
-          for lib in libs:
-              name = lib.get("name", "")
-              if ":" in name:
-                  # Maven coord: group:artifact:version
-                  parts = name.split(":")
-                  if len(parts) >= 3:
-                      g = parts[0].replace(".", "/")
-                      a = parts[1]
-                      v = parts[2]
-                      path = f"{g}/{a}/{v}/{a}-{v}.jar"
-                      url = f"https://libraries.minecraft.net/{path}"
-                      try:
-                          print(f"Baixando {name} ...")
-                          subprocess.run(["curl", "-fsSL", url, "-o", f"/tmp/forgebuild/.minecraft/libraries/{a}-{v}.jar"], check=True)
-                      except:
-                          print(f"Falha em {name} (pode não ser necessário)")
-          PY
-          # universal.jar pra dentro da estrutura do Prism (versions/forge-ver/)
-          mkdir -p src-tauri/resources/minecraft/versions/${{ env.FORGE_VERSION }}
-          cp /tmp/forge-universal.jar src-tauri/resources/minecraft/versions/${{ env.FORGE_VERSION }}/forge-${{ env.FORGE_VERSION }}.jar
-          # Copia libraries pro resources
-          cp -r /tmp/forgebuild/.minecraft/libraries src-tauri/resources/minecraft/libraries
+          mkdir -p /tmp/forgebuild/.minecraft
+          # Launcher profiles stub (necessário pro installer)
+          printf '{}' > /tmp/forgebuild/.minecraft/launcher_profiles.json
+          curl -fsSL "https://maven.minecraftforge.net/net/minecraftforge/forge/${{ env.FORGE_VERSION }}/forge-${{ env.FORGE_VERSION }}-installer.jar" -o /tmp/forge-installer.jar
+          cd /tmp/forgebuild
+          java -Djava.awt.headless=true -jar /tmp/forge-installer.jar --installClient . || java -jar /tmp/forge-installer.jar --installClient . || echo "installer falhou, continuando..."
+          # Organiza saída
+          mkdir -p src-tauri/resources/minecraft
+          cp -r .minecraft/versions src-tauri/resources/minecraft/versions || true
+          cp -r .minecraft/libraries src-tauri/resources/minecraft/libraries || true
 
       - name: Criar patch OneSix do Forge (evita metadata)
         run: |
