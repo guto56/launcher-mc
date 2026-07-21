@@ -51,19 +51,20 @@ jobs:
           # Patch OneSix mínimo (Prism baixa libraries via metadata)
           mkdir -p src-tauri/resources/forge-patch
           python3 -c "
-import json
+import json,os
+FORGE_VERSION = os.environ.get('FORGE_VERSION', '1.20.1-47.4.21')
 patch = {
     'formatVersion': 1,
     'uid': 'net.minecraftforge',
-    'version': '${FORGE_VERSION}',
+    'version': FORGE_VERSION,
     'name': 'Forge',
-    'jarMods': [{'path': 'versions/${FORGE_VERSION}/forge-${FORGE_VERSION}.jar'}],
+    'jarMods': [{'path': f'versions/{FORGE_VERSION}/forge-{FORGE_VERSION}.jar'}],
     'mainClass': 'net.minecraftforge.fml.common.launcher.FMLTweaker',
     'libraries': [],
     'requires': [{'uid': 'net.minecraft', 'equals': '1.20.1'}],
 }
 with open('src-tauri/resources/forge-patch/net.minecraftforge.json', 'w') as f:
-    json.dump(patch, f)
+    json.dump(patch, f, indent=2)
 print('Patch gerado')
 "
           mkdir -p src-tauri/resources/minecraft/libraries
