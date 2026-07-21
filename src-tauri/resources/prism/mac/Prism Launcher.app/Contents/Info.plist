@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSCameraUsageDescription</key>
+    <string>A Minecraft mod wants to access your camera.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>A Minecraft mod wants to access your microphone.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>Prism Launcher uses access to your Downloads folder to help you more quickly add mods that can't be automatically downloaded to your instance. You can change where Prism Launcher scans for downloaded mods in Settings or the prompt that appears.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Minecraft uses the local network to find and connect to LAN servers.</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSHighResolutionCapable</key>
+    <string>True</string>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>English</string>
+    <key>CFBundleExecutable</key>
+    <string>prismlauncher</string>
+    <key>CFBundleGetInfoString</key>
+    <string>Prism Launcher: A custom launcher for Minecraft that allows you to easily manage multiple installations of Minecraft at once.</string>
+    <key>CFBundleIconFile</key>
+    <string>PrismLauncher</string>
+    <key>CFBundleIconName</key>
+    <string>PrismLauncher</string>
+    <key>CFBundleIdentifier</key>
+    <string>org.prismlauncher.PrismLauncher</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleLongVersionString</key>
+    <string>11.0.3</string>
+    <key>CFBundleName</key>
+    <string>Prism Launcher</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>11.0.3</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>CFBundleVersion</key>
+    <string>11.0.3</string>
+    <key>CSResourcesFileMapped</key>
+    <true/>
+    <key>LSRequiresCarbon</key>
+    <true/>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.games</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2022-2026 Prism Launcher Contributors, © 2021-2022 PolyMC Contributors and © 2012-2021 MultiMC Contributors</string>
+    <key>SUPublicEDKey</key>
+    <string>v55ZWWD6QlPoXGV6VLzOTZxZUggWeE51X8cRQyQh6vA=</string>
+    <key>SUFeedURL</key>
+    <string>https://prismlauncher.org/feed/appcast.xml</string>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>zip</string>
+                <string>mrpack</string>
+            </array>
+            <key>CFBundleTypeName</key>
+            <string>Prism Launcher instance</string>
+            <key>CFBundleTypeOSTypes</key>
+            <array>
+                <string>TEXT</string>
+                <string>utxt</string>
+                <string>TUTX</string>
+                <string>****</string>
+            </array>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+        </dict>
+    </array>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>Curseforge</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+            <string>curseforge</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>PrismLauncher</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+            <string>prismlauncher</string>
+            <string>prismlauncher</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>
