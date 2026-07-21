@@ -12,13 +12,12 @@ env:
   JAVA_TAG: "jdk-21.0.11+10"
 
 jobs:
-  # prepare: baixar e organizar recursos embarcados (JRE 21, Prism, Forge universal)
   prepare:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Instalar Java (p/ baixar os artefatos do Forge)
+      - name: Instalar Java (p/ asset stub)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -42,47 +41,41 @@ jobs:
           curl -fsSL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-Windows-MinGW-w64-Portable-${PRISM_VERSION}.zip" -o /tmp/prism-win.zip
           (cd src-tauri/resources/prism/win && unzip -q /tmp/prism-win.zip && mv */* . 2>/dev/null || true)
 
-      - name: Baixar artefatos do Forge (installer)
+      - name: Baixar Forge universal.jar + JSON de versão
         run: |
           set -euo pipefail
-          mkdir -p /tmp/forgebuild/.minecraft
-          # Launcher profiles stub (necessário pro installer)
-          printf '{}' > /tmp/forgebuild/.minecraft/launcher_profiles.json
-          curl -fsSL "https://maven.minecraftforge.net/net/minecraftforge/forge/${{ env.FORGE_VERSION }}/forge-${{ env.FORGE_VERSION }}-installer.jar" -o /tmp/forge-installer.jar
-          cd /tmp/forgebuild
-          java -Djava.awt.headless=true -jar /tmp/forge-installer.jar --installClient . || java -jar /tmp/forge-installer.jar --installClient . || echo "installer falhou, continuando..."
-          # Organiza saída
-          mkdir -p src-tauri/resources/minecraft
-          cp -r .minecraft/versions src-tauri/resources/minecraft/versions || true
-          cp -r .minecraft/libraries src-tauri/resources/minecraft/libraries || true
-
-      - name: Criar patch OneSix do Forge (evita metadata)
-        run: |
-          set -euo pipefail
+          mkdir -p src-tauri/resources/minecraft/versions/${FORGE_VERSION}
+          # Forge universal (jar principal)
+          curl -fsSL "https://maven.minecraftforge.net/net/minecraftforge/universal/${FORGE_VERSION}/universal-${FORGE_VERSION}.jar" -o /tmp/universal.jar
+          cp /tmp/universal.jar src-tauri/resources/minecraft/versions/${FORGE_VERSION}/forge-${FORGE_VERSION}.jar
+          # JSON da versão Forge (OneSix) - o Prism gera se faltar, mas criamos um mínimo
           mkdir -p src-tauri/resources/forge-patch
-          cat > src-tauri/resources/forge-patch/net.minecraftforge.json << 'JSON'
-{
-  "formatVersion": 1,
-  "uid": "net.minecraftforge",
-  "version": "1.20.1-47.4.21",
-  "name": "Forge",
-  "jarMods": [],
-  "mainClass": "net.minecraftforge.fml.common.launcher.FMLTweaker",
-  "libraries": [],
-  "requires": [{"uid": "net.minecraft", "equals": "1.20.1"}],
-  "mainJar": {
-    "path": "versions/1.20.1-47.4.21/forge-1.20.1-47.4.21.jar",
-    "md5": ""
-  }
+          # Patch OneSix que fala pro Prism onde achar o universal.jar
+          python3 -c "
+import json
+patch = {
+    'formatVersion': 1,
+    'uid': 'net.minecraftforge',
+    'version': '${FORGE_VERSION}',
+    'name': 'Forge',
+    'jarMods': [{'path': 'versions/${FORGE_VERSION}/forge-${FORGE_VERSION}.jar'}],
+    'mainClass': 'net.minecraftforge.fml.common.launcher.FMLTweaker',
+    'libraries': [],
+    'requires': [{'uid': 'net.minecraft', 'equals': '1.20.1'}],
 }
-JSON
+with open('src-tauri/resources/forge-patch/net.minecraftforge.json', 'w') as f:
+    json.dump(patch, f)
+print('Patch gerado')
+"
+          # Libraries vazias (o Prism baixa no primeiro launch)
+          mkdir -p src-tauri/resources/minecraft/libraries
 
       - name: Commitar recursos (se houver mudanca)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A src-tauri/resources
-          git diff --cached --quiet || git commit -m "ci: recursos embarcados (JRE21+Prism+Forge ${{ env.FORGE_VERSION }})"
+          git diff --cached --quiet || git commit -m "ci: recursos embarcados (JRE21+Prism+Forge ${FORGE_VERSION})"
           git push || echo "push sem mudanca"
 
   build-macos:
