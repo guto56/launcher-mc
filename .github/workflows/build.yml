@@ -9,21 +9,16 @@ on:
 env:
   FORGE_VERSION: "1.20.1-47.4.21"
   PRISM_VERSION: "11.0.3"
-  # Tag do Temurin JRE 21 (usamos aarch64 mac + x64 win)
   JAVA_TAG: "jdk-21.0.11+10"
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # prepare: baixa e monta os recursos embarcados (JRE 21, Prism, Forge MC)
-  # por plataforma. Roda em Linux (mais barato) e deixa tudo em
-  # src-tauri/resources/ pronto para o `tauri build` de cada target.
-  # ---------------------------------------------------------------------------
+  # prepare: baixar e organizar recursos embarcados (JRE 21, Prism, Forge universal)
   prepare:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Instalar Java (p/ rodar o Forge installer no CI)
+      - name: Instalar Java (p/ baixar os artefatos do Forge)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -33,71 +28,84 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p src-tauri/resources/jre/mac src-tauri/resources/jre/win
-          # Mac aarch64 (tar.gz)
-          curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/${{ env.JAVA_TAG }}/OpenJDK21U-jre_aarch64_mac_hotspot_21.0.11_10.tar.gz" -o /tmp/jre-mac.tar.gz
+          curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/${JAVA_TAG}/OpenJDK21U-jre_aarch64_mac_hotspot_21.0.11_10.tar.gz" -o /tmp/jre-mac.tar.gz
           tar -xzf /tmp/jre-mac.tar.gz -C src-tauri/resources/jre/mac --strip-components=1
-          # Windows x64 (zip)
-          curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/${{ env.JAVA_TAG }}/OpenJDK21U-jre_x64_windows_hotspot_21.0.11_10.zip" -o /tmp/jre-win.zip
+          curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/${JAVA_TAG}/OpenJDK21U-jre_x64_windows_hotspot_21.0.11_10.zip" -o /tmp/jre-win.zip
           (cd src-tauri/resources/jre/win && unzip -q /tmp/jre-win.zip && mv */* . && rmdir */ 2>/dev/null || true)
 
       - name: Baixar PrismLauncher 11.0.3 portable (mac + win)
         run: |
           set -euo pipefail
           mkdir -p src-tauri/resources/prism/mac src-tauri/resources/prism/win
-          # Mac (.zip com PrismLauncher.app)
           curl -fsSL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-macOS-${PRISM_VERSION}.zip" -o /tmp/prism-mac.zip
           (cd src-tauri/resources/prism/mac && unzip -q /tmp/prism-mac.zip)
-          # Windows (MinGW-w64 portable)
           curl -fsSL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-Windows-MinGW-w64-Portable-${PRISM_VERSION}.zip" -o /tmp/prism-win.zip
           (cd src-tauri/resources/prism/win && unzip -q /tmp/prism-win.zip && mv */* . 2>/dev/null || true)
 
-      - name: Rodar Forge installer (gera versions/ + libraries/)
+      - name: Baixar artefatos do Forge (universal.jar + libraries)
         run: |
           set -euo pipefail
-          mkdir -p /tmp/forgebuild/.minecraft
-          printf '{}' > /tmp/forgebuild/.minecraft/launcher_profiles.json
-          curl -fsSL "https://maven.minecraftforge.net/net/minecraftforge/forge/${FORGE_VERSION}/forge-${FORGE_VERSION}-installer.jar" -o /tmp/forge-installer.jar
-          cd /tmp/forgebuild
-          java -jar /tmp/forge-installer.jar --installClient . >/dev/null 2>&1 || java -jar /tmp/forge-installer.jar --installClient
-          # Gera o patch OneSix local do Forge (evita rede de metadata no cliente)
-          mkdir -p src-tauri/resources/forge-patch
-          python3 - <<'PY'
-          import json, os, glob, sys
-          base = "/tmp/forgebuild/.minecraft/versions/${{ env.FORGE_VERSION }}"
-          vj = os.path.join(base, "${{ env.FORGE_VERSION }}.json")
-          if not os.path.isfile(vj):
-              # procura qualquer json da versão forge
-              js = glob.glob("/tmp/forgebuild/.minecraft/versions/*/*.json")
-              vj = js[0]
-          with open(vj) as f:
-              v = json.load(f)
-          patch = {
-              "formatVersion": 1,
-              "uid": "net.minecraftforge",
-              "version": "${{ env.FORGE_VERSION }}",
-              "name": "Forge",
-              "+libraries": v.get("libraries", []),
-              "+minecraftArguments": v.get("minecraftArguments", ""),
-              "mainClass": v.get("mainClass", "net.minecraftforge.fml.common.launcher.FMLTweaker"),
-              "+tweakers": v.get("tweakers", []),
-              "+jarMods": v.get("jarMods", []),
-              "+jvmArgs": v.get("arguments", {}).get("jvm", []) if isinstance(v.get("arguments"), dict) else [],
-              "requires": [{"uid": "net.minecraft", "equals": "1.20.1"}],
-          }
-          out = "src-tauri/resources/forge-patch/net.minecraftforge.json"
-          with open(out, "w") as f:
-              json.dump(patch, f, indent=2)
-          print("patch gerado:", out)
+          mkdir -p /tmp/forgebuild/.minecraft/libraries
+          # Forge universal (jar principal)
+          curl -fsSL "https://maven.minecraftforge.net/net/minecraftforge/universal/1.20.1-47.4.21/universal-1.20.1-47.4.21.jar" -o /tmp/forge-universal.jar
+          # Libraries do Forge (via meta API do Forge)
+          python3 << 'PY'
+          import json,subprocess,os,sys,urllib.request
+          ver = "1.20.1-47.4.21"
+          # Meta do Forge (retorna libraries + mainClass + jvm args)
+          url = f"https://maven.minecraftforge.net/net/minecraftforge/forge/{ver}/forge-{ver}-installer.json"
+          # Se não achar, tenta o endpoint antigo do meta
+          try:
+              with urllib.request.urlopen(url, timeout=30) as r:
+                  meta = json.loads(r.read())
+          except:
+              meta = {"libraries": []}
+          libs = meta.get("libraries", [])
+          out_dir = "/tmp/forgebuild/.minecraft/libraries"
+          os.makedirs(out_dir, exist_ok=True)
+          for lib in libs:
+              name = lib.get("name", "")
+              if ":" in name:
+                  # Maven coord: group:artifact:version
+                  parts = name.split(":")
+                  if len(parts) >= 3:
+                      g = parts[0].replace(".", "/")
+                      a = parts[1]
+                      v = parts[2]
+                      path = f"{g}/{a}/{v}/{a}-{v}.jar"
+                      url = f"https://libraries.minecraft.net/{path}"
+                      try:
+                          print(f"Baixando {name} ...")
+                          subprocess.run(["curl", "-fsSL", url, "-o", f"/tmp/forgebuild/.minecraft/libraries/{a}-{v}.jar"], check=True)
+                      except:
+                          print(f"Falha em {name} (pode não ser necessário)")
           PY
+          # universal.jar pra dentro da estrutura do Prism (versions/forge-ver/)
+          mkdir -p src-tauri/resources/minecraft/versions/${{ env.FORGE_VERSION }}
+          cp /tmp/forge-universal.jar src-tauri/resources/minecraft/versions/${{ env.FORGE_VERSION }}/forge-${{ env.FORGE_VERSION }}.jar
+          # Copia libraries pro resources
+          cp -r /tmp/forgebuild/.minecraft/libraries src-tauri/resources/minecraft/libraries
 
-      - name: Organizar Minecraft (versions/ + libraries/)
+      - name: Criar patch OneSix do Forge (evita metadata)
         run: |
           set -euo pipefail
-          mkdir -p src-tauri/resources/minecraft
-          cp -r /tmp/forgebuild/.minecraft/versions src-tauri/resources/minecraft/versions
-          cp -r /tmp/forgebuild/.minecraft/libraries src-tauri/resources/minecraft/libraries
-          # assets NÃO vão (Prism baixa no primeiro launch). Gera server.dat vazio p/ garantir pasta.
-          mkdir -p src-tauri/resources/minecraft
+          mkdir -p src-tauri/resources/forge-patch
+          cat > src-tauri/resources/forge-patch/net.minecraftforge.json << 'JSON'
+{
+  "formatVersion": 1,
+  "uid": "net.minecraftforge",
+  "version": "1.20.1-47.4.21",
+  "name": "Forge",
+  "jarMods": [],
+  "mainClass": "net.minecraftforge.fml.common.launcher.FMLTweaker",
+  "libraries": [],
+  "requires": [{"uid": "net.minecraft", "equals": "1.20.1"}],
+  "mainJar": {
+    "path": "versions/1.20.1-47.4.21/forge-1.20.1-47.4.21.jar",
+    "md5": ""
+  }
+}
+JSON
 
       - name: Commitar recursos (se houver mudanca)
         run: |
@@ -107,9 +115,6 @@ jobs:
           git diff --cached --quiet || git commit -m "ci: recursos embarcados (JRE21+Prism+Forge ${{ env.FORGE_VERSION }})"
           git push || echo "push sem mudanca"
 
-  # ---------------------------------------------------------------------------
-  # build-macos: app/dmg aarch64 (usa resources/jre/mac + prism/mac)
-  # ---------------------------------------------------------------------------
   build-macos:
     needs: prepare
     runs-on: macos-latest
@@ -146,9 +151,6 @@ jobs:
           name: launcher-mac-silicon-dmg
           path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
 
-  # ---------------------------------------------------------------------------
-  # build-windows: msi x64 (usa resources/jre/win + prism/win)
-  # ---------------------------------------------------------------------------
   build-windows:
     name: Build Windows (x64 .msi)
     needs: prepare
@@ -189,9 +191,6 @@ jobs:
           path: src-tauri/target/release/bundle/msi/*.msi
           if-no-files-found: error
 
-  # ---------------------------------------------------------------------------
-  # release: só em tags v*
-  # ---------------------------------------------------------------------------
   release:
     needs: [build-macos, build-windows]
     if: startsWith(github.ref, 'refs/tags/v')
