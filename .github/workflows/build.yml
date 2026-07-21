@@ -42,10 +42,12 @@ jobs:
 
         mkdir -p src-tauri/resources/prism/mac src-tauri/resources/prism/win
 
+        # macOS - novo nome do asset
         curl -fsSL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-macOS-${PRISM_VERSION}.zip" -o /tmp/prism-mac.zip
 
         (cd src-tauri/resources/prism/mac && unzip -q /tmp/prism-mac.zip)
 
+        # Windows portable
         curl -fsSL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-Windows-MinGW-w64-Portable-${PRISM_VERSION}.zip" -o /tmp/prism-win.zip
 
         (cd src-tauri/resources/prism/win && unzip -q /tmp/prism-win.zip && mv */* . 2>/dev/null || true)'
