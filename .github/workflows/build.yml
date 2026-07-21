@@ -9,7 +9,8 @@ on:
 env:
   FORGE_VERSION: "1.20.1-47.4.21"
   PRISM_VERSION: "11.0.3"
-  JAVA_TAG: "jdk-21.0.11+10"
+  JAVA_VERSION: "21.0.11"
+  JAVA_BUILD: "10"
 
 jobs:
   prepare:
@@ -27,9 +28,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p src-tauri/resources/jre/mac src-tauri/resources/jre/win
-          curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/${JAVA_TAG}/OpenJDK21U-jre_aarch64_mac_hotspot_21.0.11_10.tar.gz" -o /tmp/jre-mac.tar.gz
+          # macOS aarch64
+          curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-${JAVA_VERSION}%2B${JAVA_BUILD}/OpenJDK21U-jre_aarch64_mac_hotspot_${JAVA_VERSION}_${JAVA_BUILD}.tar.gz" -o /tmp/jre-mac.tar.gz
           tar -xzf /tmp/jre-mac.tar.gz -C src-tauri/resources/jre/mac --strip-components=1
-          curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/${JAVA_TAG}/OpenJDK21U-jre_x64_windows_hotspot_21.0.11_10.zip" -o /tmp/jre-win.zip
+          # Windows x64
+          curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-${JAVA_VERSION}%2B${JAVA_BUILD}/OpenJDK21U-jre_x64_windows_hotspot_${JAVA_VERSION}_${JAVA_BUILD}.zip" -o /tmp/jre-win.zip
           (cd src-tauri/resources/jre/win && unzip -q /tmp/jre-win.zip && mv */* . && rmdir */ 2>/dev/null || true)
 
       - name: Baixar PrismLauncher portable (mac + win)
