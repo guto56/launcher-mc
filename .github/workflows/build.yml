@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Instalar Java (p/ asset stub)
+      - name: Setup Java 21 (para installer)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -32,7 +32,7 @@ jobs:
           curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/${JAVA_TAG}/OpenJDK21U-jre_x64_windows_hotspot_21.0.11_10.zip" -o /tmp/jre-win.zip
           (cd src-tauri/resources/jre/win && unzip -q /tmp/jre-win.zip && mv */* . && rmdir */ 2>/dev/null || true)
 
-      - name: Baixar PrismLauncher 11.0.3 portable (mac + win)
+      - name: Baixar PrismLauncher portable (mac + win)
         run: |
           set -euo pipefail
           mkdir -p src-tauri/resources/prism/mac src-tauri/resources/prism/win
@@ -41,14 +41,19 @@ jobs:
           curl -fsSL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-Windows-MinGW-w64-Portable-${PRISM_VERSION}.zip" -o /tmp/prism-win.zip
           (cd src-tauri/resources/prism/win && unzip -q /tmp/prism-win.zip && mv */* . 2>/dev/null || true)
 
-      - name: Baixar Forge universal.jar + JSON de versão
+      - name: Baixar Forge + instalar libraries
         run: |
           set -euo pipefail
           mkdir -p src-tauri/resources/minecraft/versions/${FORGE_VERSION}
-          # Forge universal (jar principal) - Maven layout forge-*-universal.jar
-          curl -fsSL "https://maven.minecraftforge.net/net/minecraftforge/forge/${FORGE_VERSION}/forge-${FORGE_VERSION}-universal.jar" -o /tmp/universal.jar
-          cp /tmp/universal.jar src-tauri/resources/minecraft/versions/${FORGE_VERSION}/forge-${FORGE_VERSION}.jar
-          # Patch OneSix mínimo (Prism baixa libraries via metadata)
+          # Universal jar
+          curl -fsSL "https://maven.minecraftforge.net/net/minecraftforge/forge/${FORGE_VERSION}/forge-${FORGE_VERSION}-universal.jar" -o src-tauri/resources/minecraft/versions/${FORGE_VERSION}/forge-${FORGE_VERSION}.jar
+          # Installer para gerar libraries/ e assets/
+          curl -fsSL "https://maven.minecraftforge.net/net/minecraftforge/forge/${FORGE_VERSION}/forge-${FORGE_VERSION}-installer.jar" -o /tmp/forge-installer.jar
+          mkdir -p /tmp/mc-staging/.minecraft
+          cd /tmp/mc-staging
+          java -jar /tmp/forge-installer.jar --installClient || true
+          cp -r .minecraft/* ../src-tauri/resources/minecraft/ 2>/dev/null || true
+          # OneSix patch
           mkdir -p src-tauri/resources/forge-patch
           python3 -c "
 import json,os
@@ -67,31 +72,30 @@ with open('src-tauri/resources/forge-patch/net.minecraftforge.json', 'w') as f:
     json.dump(patch, f, indent=2)
 print('Patch gerado')
 "
-          mkdir -p src-tauri/resources/minecraft/libraries
 
-      - name: Commitar recursos (se houver mudanca)
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A src-tauri/resources
-          git diff --cached --quiet || git commit -m "ci: recursos embarcados (JRE21+Prism+Forge ${FORGE_VERSION})"
-          git push || echo "push sem mudanca"
+      - name: Upload embedded resources
+        uses: actions/upload-artifact@v4
+        with:
+          name: embedded-resources
+          path: src-tauri/resources/
 
   build-macos:
     needs: prepare
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Download embedded resources
+        uses: actions/download-artifact@v4
+        with:
+          name: embedded-resources
+          path: src-tauri/resources
+
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin
 
@@ -118,35 +122,35 @@ print('Patch gerado')
     needs: prepare
     runs-on: windows-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: main
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "22"
 
-      - name: Setup Rust (MSVC x64)
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
+      - uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
+
+      - name: Download embedded resources
+        uses: actions/download-artifact@v4
+        with:
+          name: embedded-resources
+          path: src-tauri/resources
 
       - name: Install frontend deps
         run: npm install
 
-      - name: Build Tauri (Windows -> .msi)
+      - name: Build Tauri (Windows)
         run: npm run tauri build
         env:
           LAUNCHER_API_BASE: ${{ secrets.LAUNCHER_API_BASE || 'https://painel-mc.centralchamados.xyz' }}
 
-      - name: Upload MSI artifact
+      - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
           name: launcher-windows-msi
@@ -161,7 +165,6 @@ print('Patch gerado')
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*
