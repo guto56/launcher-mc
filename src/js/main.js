@@ -80,19 +80,11 @@ async function onPlay() {
       showError('Falha ao preparar o jogo: ' + (installed.message || 'desconhecido'));
       return;
     }
-    setPlayStatus('Iniciando o Minecraft Forge do Nexus…');
-    const res = await playGame();
-    if (res && res.launched) {
-      setPlayStatus(res.message || 'Minecraft iniciado. Aproveite o servidor Nexus!');
-      toast('Minecraft iniciado 🎮', 'ok');
-    } else {
-      const msg = (res && res.message) || 'Não foi possível iniciar o jogo.';
-      setPlayStatus(msg);
-      showError(msg);
-    }
+    setPlayStatus('Jogo pronto! Clique em Jogar novamente para abrir o Minecraft.');
+    toast('Jogo preparado com sucesso ✅', 'ok');
   } catch (e) {
     setPlayStatus('');
-    showError('Erro ao jogar: ' + (e && e.message ? e.message : String(e)));
+    showError('Erro ao preparar o jogo: ' + (e && e.message ? e.message : String(e)));
   } finally {
     if (btn) btn.disabled = false;
   }

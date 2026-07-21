@@ -53,6 +53,21 @@
   pointer-events: none;
 }
 
+/* Respeita prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .splash,
+  .splash-logo,
+  .splash-spinner {
+    animation: none !important;
+    transition: none !important;
+  }
+  .splash.hide {
+    animation: none !important;
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
 @keyframes splash-in {
   from { opacity: 0; }
   to   { opacity: 1; }
@@ -71,18 +86,27 @@
 
 /* --- Wizard: passos entram com slide+fade --- */
 .wizard-step {
-  animation: wizard-step-in .45s cubic-bezier(.2,.7,.2,1) both;
+  animation: wizard-step-in .55s cubic-bezier(.2,.7,.2,1) both;
 }
 .wizard-step.out {
-  animation: wizard-step-out .3s ease forwards;
+  animation: wizard-step-out .35s ease forwards;
 }
 @keyframes wizard-step-in {
-  from { opacity: 0; transform: translateX(28px); }
+  from { opacity: 0; transform: translateX(32px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 @keyframes wizard-step-out {
   from { opacity: 1; transform: translateX(0); }
-  to   { opacity: 0; transform: translateX(-28px); }
+  to   { opacity: 0; transform: translateX(-32px); }
+}
+
+/* Respeita prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .wizard-step,
+  .wizard-step.out {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 /* --- Barra de progresso do wizard --- */
