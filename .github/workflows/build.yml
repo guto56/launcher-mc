@@ -45,12 +45,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p src-tauri/resources/minecraft/versions/${FORGE_VERSION}
-          # Forge universal (jar principal)
-          curl -fsSL "https://maven.minecraftforge.net/net/minecraftforge/universal/${FORGE_VERSION}/universal-${FORGE_VERSION}.jar" -o /tmp/universal.jar
+          # Forge universal (jar principal) - Maven layout forge-*-universal.jar
+          curl -fsSL "https://maven.minecraftforge.net/net/minecraftforge/forge/${FORGE_VERSION}/forge-${FORGE_VERSION}-universal.jar" -o /tmp/universal.jar
           cp /tmp/universal.jar src-tauri/resources/minecraft/versions/${FORGE_VERSION}/forge-${FORGE_VERSION}.jar
-          # JSON da versão Forge (OneSix) - o Prism gera se faltar, mas criamos um mínimo
+          # Patch OneSix mínimo (Prism baixa libraries via metadata)
           mkdir -p src-tauri/resources/forge-patch
-          # Patch OneSix que fala pro Prism onde achar o universal.jar
           python3 -c "
 import json
 patch = {
@@ -67,7 +66,6 @@ with open('src-tauri/resources/forge-patch/net.minecraftforge.json', 'w') as f:
     json.dump(patch, f)
 print('Patch gerado')
 "
-          # Libraries vazias (o Prism baixa no primeiro launch)
           mkdir -p src-tauri/resources/minecraft/libraries
 
       - name: Commitar recursos (se houver mudanca)
