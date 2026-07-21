@@ -1,7 +1,9 @@
 mod commands;
+mod dedicated;
 mod download;
 
 use commands::*;
+use dedicated::*;
 use crate::download::download_mod;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -17,10 +19,10 @@ pub fn run() {
             base_url,
             server_mods,
             server_status,
-            ensure_forge,
-            launch_minecraft,
             detect_launcher,
+            install_game,
+            play_game,
         ])
         .run(tauri::generate_context!())
-        .expect("erro ao rodar o Launcher MC Silicon");
+        .expect("erro ao rodar o Nexus Launcher");
 }

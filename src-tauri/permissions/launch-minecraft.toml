@@ -1,4 +1,0 @@
-[[permission]]
-identifier = "allow-launch-minecraft"
-description = "Allows launching the Minecraft Launcher on the selected profile"
-commands.allow = ["launch_minecraft"]

@@ -4,12 +4,12 @@
 //   1) detect_launcher()  -> Minecraft instalado? qual launcher? (não bloqueia por original)
 //   2) server_status()    -> versão do servidor vs 1.20.1 (alvo Forge 1.20.1-47.4.21)
 //   3) mods faltando?     -> list_local_mods + server_mods + compareMods; baixa pendentes
-//   4) ensure_forge()     -> idempotente; se Java ausente, oferece "Tentar de novo"
+//   4) install_game()    -> copia os recursos embarcados (JRE + Forge + server)
 //   5) concluído          -> check animado + resumo + "Entrar" (grava flag, vai pra home)
 //
 // REGRA DO OWNER: não verificamos se é "original" e não bloqueamos nenhum launcher.
 
-import { detectLauncher, serverStatus, ensureForge, detectModsDir, listLocalMods } from './fs.js';
+import { detectLauncher, serverStatus, installGame, onInstallProgress, detectModsDir, listLocalMods } from './fs.js';
 import { fetchServerMods } from './api.js';
 import { compareMods, pendingMods, downloadPending } from './mods.js';
 import { showProgress, setProgress, toast, showError, hideError } from './ui.js';
@@ -207,29 +207,51 @@ export async function startWizard(ctx) {
     setNextEnabled(true);
   }
 
-  // ---- Passo 4: ensure_forge ----
+  // ---- Passo 4: install_game (prepara o jogo a partir dos recursos embarcados) ----
   async function runForge() {
     const body = document.getElementById('wizardStep4Body');
     const status = document.getElementById('forgeStatus');
     setNextEnabled(false);
-    status.textContent = 'Garantindo Forge 1.20.1…';
+    status.textContent = 'Preparando o jogo (JRE + Forge 1.20.1)…';
+    body.innerHTML = `
+      <p class="muted">Copiando os recursos embarcados para a pasta do Nexus. Isso pode levar um pouco na primeira vez.</p>
+      <div class="progress-card">
+        <div class="progress-head">
+          <span id="installLabel">Preparando…</span>
+          <span id="installPct">0%</span>
+        </div>
+        <div class="progress-track"><div id="installBar" class="progress-bar"></div></div>
+      </div>`;
+    const bar = document.getElementById('installBar');
+    const pct = document.getElementById('installPct');
+    const label = document.getElementById('installLabel');
+    // Ouve o progresso emitido pelo Rust (install_game).
+    onInstallProgress((p) => {
+      const ratio = Number(p.progress) || 0;
+      if (bar) bar.style.width = `${ratio}%`;
+      if (pct) pct.textContent = `${ratio}%`;
+      if (label && p.message) label.textContent = p.message;
+    });
+
     try {
-      const f = await ensureForge(TARGET_MC);
-      state.forgeStatus = f;
-      if (!f.java_present) {
-        status.textContent = 'Java não encontrado.';
+      const f = await installGame();
+      state.installStatus = f;
+      if (bar) bar.style.width = '100%';
+      if (pct) pct.textContent = '100%';
+      if (!f.done) {
+        status.textContent = 'Falha ao preparar o jogo.';
         body.innerHTML = `
-          <p class="muted">O Forge 1.20.1 precisa do Java 21+. Instale o Java 21+ (Adoptium/Temurin) e clique em “Tentar de novo”.</p>
+          <p class="muted">Erro: ${String(f.message || 'desconhecido')}</p>
           <button id="forgeRetry" class="btn primary">Tentar de novo</button>`;
         document.getElementById('forgeRetry')?.addEventListener('click', runForge);
         setNextEnabled(false);
         return;
       }
-      status.textContent = f.installed ? `Forge pronto (${f.profile}).` : (f.message || 'Forge preparado.');
-      body.innerHTML = `<p class="muted">${f.message || 'Perfil Forge configurado.'}</p>`;
+      status.textContent = 'Jogo pronto! 🎉';
+      body.innerHTML = `<p class="muted">${f.message || 'Recursos do Nexus copiados. Pronto para jogar.'}</p>`;
       setNextEnabled(true);
     } catch (e) {
-      status.textContent = 'Falha ao preparar o Forge.';
+      status.textContent = 'Falha ao preparar o jogo.';
       body.innerHTML = `
         <p class="muted">Erro: ${String(e.message || e)}</p>
         <button id="forgeRetry" class="btn primary">Tentar de novo</button>`;
@@ -251,8 +273,8 @@ export async function startWizard(ctx) {
       li.push(`<li>Servidor: ${state.status.version || '—'} (${state.status.running ? 'online' : 'offline'})</li>`);
     }
     li.push(`<li>Mods baixados: ${state.pendingCount === 0 ? 'todos em dia' : `${state.pendingCount} pendente(s) resolvido(s)`}</li>`);
-    if (state.forgeStatus) {
-      li.push(`<li>Forge: ${state.forgeStatus.installed ? state.forgeStatus.profile : 'não instalado'}${state.forgeStatus.java_present ? '' : ' (sem Java)'}</li>`);
+    if (state.installStatus) {
+      li.push(`<li>Jogo Nexus: ${state.installStatus.done ? 'preparado (JRE 21 + Forge 1.20.1)' : 'não preparado'}</li>`);
     }
     summary.innerHTML = li.join('');
     setNextEnabled(true);

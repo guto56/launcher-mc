@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-install-game"
+description = "Allows preparing the game from embedded resources (install_game)"
+commands.allow = ["install_game"]

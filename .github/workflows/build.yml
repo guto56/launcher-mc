@@ -1,4 +1,4 @@
-name: Build Launcher MC Silicon
+name: Build Nexus Launcher
 
 on:
   push:
@@ -6,11 +6,115 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+env:
+  FORGE_VERSION: "1.20.1-47.4.21"
+  PRISM_VERSION: "11.0.3"
+
 jobs:
+  # ---------------------------------------------------------------------------
+  # prepare: baixa e monta os recursos embarcados (JRE 21, Prism, Forge MC)
+  # por plataforma. Roda em Linux (mais barato) e deixa tudo em
+  # src-tauri/resources/ pronto para o `tauri build` de cada target.
+  # ---------------------------------------------------------------------------
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar Java (p/ rodar o Forge installer no CI)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Baixar JRE 21 Temurin (mac-aarch64 + win-x64)
+        run: |
+          set -euo pipefail
+          mkdir -p src-tauri/resources/jre/mac src-tauri/resources/jre/win
+          # Mac aarch64
+          curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jre_aarch64_mac_hotspot_21.0.5_11.tar.gz" -o /tmp/jre-mac.tar.gz
+          tar -xzf /tmp/jre-mac.tar.gz -C src-tauri/resources/jre/mac --strip-components=1
+          # Windows x64
+          curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jre_x64_windows_hotspot_21.0.5_11.zip" -o /tmp/jre-win.zip
+          (cd src-tauri/resources/jre/win && unzip -q /tmp/jre-win.zip && mv */* . && rmdir */ 2>/dev/null || true)
+
+      - name: Baixar PrismLauncher 11.0.3 portable (mac + win)
+        run: |
+          set -euo pipefail
+          mkdir -p src-tauri/resources/prism/mac src-tauri/resources/prism/win
+          # Mac (.zip com PrismLauncher.app)
+          curl -fsSL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-MacOS-${PRISM_VERSION}.zip" -o /tmp/prism-mac.zip
+          (cd src-tauri/resources/prism/mac && unzip -q /tmp/prism-mac.zip)
+          # Windows (Portable)
+          curl -fsSL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-Windows-Portable-${PRISM_VERSION}.zip" -o /tmp/prism-win.zip
+          (cd src-tauri/resources/prism/win && unzip -q /tmp/prism-win.zip && mv */* . 2>/dev/null || true)
+
+      - name: Rodar Forge installer (gera versions/ + libraries/)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/forgebuild/.minecraft
+          printf '{}' > /tmp/forgebuild/.minecraft/launcher_profiles.json
+          curl -fsSL "https://maven.minecraftforge.net/net/minecraftforge/forge/${FORGE_VERSION}/forge-${FORGE_VERSION}-installer.jar" -o /tmp/forge-installer.jar
+          cd /tmp/forgebuild
+          java -jar /tmp/forge-installer.jar --installClient . >/dev/null 2>&1 || java -jar /tmp/forge-installer.jar --installClient
+          # Gera o patch OneSix local do Forge (evita rede de metadata no cliente)
+          mkdir -p src-tauri/resources/forge-patch
+          python3 - <<'PY'
+          import json, os, glob, sys
+          base = "/tmp/forgebuild/.minecraft/versions/${{ env.FORGE_VERSION }}"
+          vj = os.path.join(base, "${{ env.FORGE_VERSION }}.json")
+          if not os.path.isfile(vj):
+              # procura qualquer json da versão forge
+              js = glob.glob("/tmp/forgebuild/.minecraft/versions/*/*.json")
+              vj = js[0]
+          with open(vj) as f:
+              v = json.load(f)
+          patch = {
+              "formatVersion": 1,
+              "uid": "net.minecraftforge",
+              "version": "${{ env.FORGE_VERSION }}",
+              "name": "Forge",
+              "+libraries": v.get("libraries", []),
+              "+minecraftArguments": v.get("minecraftArguments", ""),
+              "mainClass": v.get("mainClass", "net.minecraftforge.fml.common.launcher.FMLTweaker"),
+              "+tweakers": v.get("tweakers", []),
+              "+jarMods": v.get("jarMods", []),
+              "+jvmArgs": v.get("arguments", {}).get("jvm", []) if isinstance(v.get("arguments"), dict) else [],
+              "requires": [{"uid": "net.minecraft", "equals": "1.20.1"}],
+          }
+          out = "src-tauri/resources/forge-patch/net.minecraftforge.json"
+          with open(out, "w") as f:
+              json.dump(patch, f, indent=2)
+          print("patch gerado:", out)
+          PY
+
+      - name: Organizar Minecraft (versions/ + libraries/)
+        run: |
+          set -euo pipefail
+          mkdir -p src-tauri/resources/minecraft
+          cp -r /tmp/forgebuild/.minecraft/versions src-tauri/resources/minecraft/versions
+          cp -r /tmp/forgebuild/.minecraft/libraries src-tauri/resources/minecraft/libraries
+          # assets NÃO vão (Prism baixa no primeiro launch). Gera server.dat vazio p/ garantir pasta.
+          mkdir -p src-tauri/resources/minecraft
+
+      - name: Commitar recursos (se houver mudanca)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A src-tauri/resources
+          git diff --cached --quiet || git commit -m "ci: recursos embarcados (JRE21+Prism+Forge ${{ env.FORGE_VERSION }})"
+          git push || echo "push sem mudanca"
+
+  # ---------------------------------------------------------------------------
+  # build-macos: app/dmg aarch64 (usa resources/jre/mac + prism/mac)
+  # ---------------------------------------------------------------------------
   build-macos:
+    needs: prepare
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -40,12 +144,18 @@ jobs:
           name: launcher-mac-silicon-dmg
           path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
 
+  # ---------------------------------------------------------------------------
+  # build-windows: msi x64 (usa resources/jre/win + prism/win)
+  # ---------------------------------------------------------------------------
   build-windows:
     name: Build Windows (x64 .msi)
+    needs: prepare
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -77,6 +187,9 @@ jobs:
           path: src-tauri/target/release/bundle/msi/*.msi
           if-no-files-found: error
 
+  # ---------------------------------------------------------------------------
+  # release: só em tags v*
+  # ---------------------------------------------------------------------------
   release:
     needs: [build-macos, build-windows]
     if: startsWith(github.ref, 'refs/tags/v')

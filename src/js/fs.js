@@ -47,12 +47,22 @@ export async function serverStatus() {
   return invoke('server_status');
 }
 
-export async function ensureForge(version) {
-  return invoke('ensure_forge', { version });
+export async function installGame() {
+  return invoke('install_game');
 }
 
-export async function launchMinecraft(profile, launcher) {
-  return invoke('launch_minecraft', { profile, launcher });
+export async function playGame() {
+  return invoke('play_game');
+}
+
+/// Assina os eventos de progresso do `install_game` (emitidos via Rust).
+export async function onInstallProgress(cb) {
+  try {
+    const { listen } = await import('@tauri-apps/api/event');
+    await listen('install-progress', (e) => cb(e.payload));
+  } catch {
+    /* modo browser/dev: ignora */
+  }
 }
 
 export async function detectLauncher() {

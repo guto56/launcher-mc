@@ -22,3 +22,4 @@ reqwest = { version = "0.12", features = ["json", "default-tls"], default-featur
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 dirs = "5"
+zip = "0.6"

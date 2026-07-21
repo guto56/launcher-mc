@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-play-game"
+description = "Allows launching the game directly with the embedded JRE (play_game)"
+commands.allow = ["play_game"]

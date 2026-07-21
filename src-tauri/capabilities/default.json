@@ -14,8 +14,8 @@
     "allow-base-url",
     "allow-server-mods",
     "allow-server-status",
-    "allow-ensure-forge",
-    "allow-launch-minecraft",
-    "allow-detect-launcher"
+    "allow-detect-launcher",
+    "allow-install-game",
+    "allow-play-game"
   ]
 }

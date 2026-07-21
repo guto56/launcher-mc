@@ -1,4 +1,4 @@
-import { detectModsDir, listLocalMods, openMinecraftFolder, getBaseUrl, ensureForge, launchMinecraft, detectLauncher } from './fs.js';
+import { detectModsDir, listLocalMods, openMinecraftFolder, getBaseUrl, installGame, playGame, detectLauncher } from './fs.js';
 import { fetchServerMods, fetchStatus } from './api.js';
 import { compareMods, pendingMods, downloadPending } from './mods.js';
 import { setStatus, setHomeStats, setModsDir, renderMods, setDiffSummary, setInstallEnabled, showProgress, setProgress, toast, showError, hideError, setPlayStatus, showHome } from './ui.js';
@@ -73,31 +73,22 @@ async function onPlay() {
   if (btn) btn.disabled = true;
   hideError();
   try {
-    setPlayStatus('Verificando/instalando Forge…');
-    const status = await ensureForge(state.version);
-    if (!status.java_present) {
-      setPlayStatus('Java não encontrado. Instale o Java 21+ (Adoptium/Temurin) e tente de novo.');
-      showError('Java não encontrado. Instale o Java 21+ (Adoptium/Temurin) e tente de novo.');
+    setPlayStatus('Garantindo o jogo preparado…');
+    const installed = await installGame();
+    if (!installed.done) {
+      setPlayStatus(installed.message || 'Falha ao preparar o jogo.');
+      showError('Falha ao preparar o jogo: ' + (installed.message || 'desconhecido'));
       return;
     }
-    if (!status.installed) {
-      setPlayStatus(status.message || 'Não foi possível preparar o Forge.');
-      showError('Erro ao preparar o Forge: ' + (status.message || 'desconhecido'));
-      return;
-    }
-    // Resolve o launcher: usa o do wizard (state.launcher) ou re-detecta.
-    const launcher = (window.__NEXUS_LAUNCHER__ && window.__NEXUS_LAUNCHER__.launcher)
-      || (state.launcher && state.launcher.launcher)
-      || '';
-    setPlayStatus(`Forge pronto (${status.profile}). Abrindo Minecraft…`);
-    const res = await launchMinecraft(status.profile, launcher);
-    if (res.needs_version_select) {
-      const msg = 'Selecione a versão "Nexus Forge 1.20.1" no launcher e clique em Play';
-      setPlayStatus(msg);
-      toast(msg, 'ok');
+    setPlayStatus('Iniciando o Minecraft Forge do Nexus…');
+    const res = await playGame();
+    if (res && res.launched) {
+      setPlayStatus(res.message || 'Minecraft iniciado. Aproveite o servidor Nexus!');
+      toast('Minecraft iniciado 🎮', 'ok');
     } else {
-      setPlayStatus('Minecraft aberto no perfil Forge. Clique em Play no launcher.');
-      toast('Minecraft aberto no perfil Forge', 'ok');
+      const msg = (res && res.message) || 'Não foi possível iniciar o jogo.';
+      setPlayStatus(msg);
+      showError(msg);
     }
   } catch (e) {
     setPlayStatus('');
