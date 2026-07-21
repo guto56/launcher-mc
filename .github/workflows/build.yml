@@ -9,6 +9,8 @@ on:
 env:
   FORGE_VERSION: "1.20.1-47.4.21"
   PRISM_VERSION: "11.0.3"
+  # Tag do Temurin JRE 21 (usamos aarch64 mac + x64 win)
+  JAVA_TAG: "jdk-21.0.11+10"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -31,11 +33,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p src-tauri/resources/jre/mac src-tauri/resources/jre/win
-          # Mac aarch64
-          curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jre_aarch64_mac_hotspot_21.0.5_11.tar.gz" -o /tmp/jre-mac.tar.gz
+          # Mac aarch64 (tar.gz)
+          curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/${{ env.JAVA_TAG }}/OpenJDK21U-jre_aarch64_mac_hotspot_21.0.11_10.tar.gz" -o /tmp/jre-mac.tar.gz
           tar -xzf /tmp/jre-mac.tar.gz -C src-tauri/resources/jre/mac --strip-components=1
-          # Windows x64
-          curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jre_x64_windows_hotspot_21.0.5_11.zip" -o /tmp/jre-win.zip
+          # Windows x64 (zip)
+          curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/${{ env.JAVA_TAG }}/OpenJDK21U-jre_x64_windows_hotspot_21.0.11_10.zip" -o /tmp/jre-win.zip
           (cd src-tauri/resources/jre/win && unzip -q /tmp/jre-win.zip && mv */* . && rmdir */ 2>/dev/null || true)
 
       - name: Baixar PrismLauncher 11.0.3 portable (mac + win)
@@ -43,10 +45,10 @@ jobs:
           set -euo pipefail
           mkdir -p src-tauri/resources/prism/mac src-tauri/resources/prism/win
           # Mac (.zip com PrismLauncher.app)
-          curl -fsSL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-MacOS-${PRISM_VERSION}.zip" -o /tmp/prism-mac.zip
+          curl -fsSL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-macOS-${PRISM_VERSION}.zip" -o /tmp/prism-mac.zip
           (cd src-tauri/resources/prism/mac && unzip -q /tmp/prism-mac.zip)
-          # Windows (Portable)
-          curl -fsSL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-Windows-Portable-${PRISM_VERSION}.zip" -o /tmp/prism-win.zip
+          # Windows (MinGW-w64 portable)
+          curl -fsSL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-Windows-MinGW-w64-Portable-${PRISM_VERSION}.zip" -o /tmp/prism-win.zip
           (cd src-tauri/resources/prism/win && unzip -q /tmp/prism-win.zip && mv */* . 2>/dev/null || true)
 
       - name: Rodar Forge installer (gera versions/ + libraries/)
