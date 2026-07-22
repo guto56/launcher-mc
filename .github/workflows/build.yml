@@ -17,7 +17,7 @@ env:
 jobs:
   # ---------------------------------------------------------------------------
   # Prepare: usa recursos JÁ COMMITADOS no repo (jre/, prism/, minecraft/).
-  # Baixa apenas o que falta e gera o patch OneSix do Forge.
+  # Apenas verifica existência e gera o patch OneSix do Forge.
   # ---------------------------------------------------------------------------
   prepare:
     runs-on: ubuntu-latest
@@ -30,78 +30,59 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Verificar/baixar JRE 21 Temurin (mac-aarch64 + win-x64)
+      - name: Verificar recursos embarcados
         run: |
           set -euo pipefail
-          mkdir -p src-tauri/resources/jre/mac src-tauri/resources/jre/win
-          
-          # macOS aarch64 - only download if missing
-          if [ ! -f src-tauri/resources/jre/mac/Contents/Home/bin/java ]; then
-            echo "Downloading JRE macOS..."
-            curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-${JAVA_VERSION}%2B${JAVA_BUILD}/OpenJDK21U-jre_aarch64_mac_hotspot_${JAVA_VERSION}_${JAVA_BUILD}.tar.gz" -o /tmp/jre-mac.tar.gz
-            tar -xzf /tmp/jre-mac.tar.gz -C src-tauri/resources/jre/mac --strip-components=1
+          echo "=== Verificando JRE macOS ==="
+          if [ -f "src-tauri/resources/jre/mac/Contents/Home/bin/java" ]; then
+            echo "✓ JRE macOS encontrado"
           else
-            echo "JRE macOS already present"
+            echo "✗ JRE macOS NÃO encontrado - build falhará"
+            exit 1
           fi
           
-          # Windows x64 - only download if missing
-          if [ ! -f src-tauri/resources/jre/win/bin/java.exe ]; then
-            echo "Downloading JRE Windows..."
-            curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-${JAVA_VERSION}%2B${JAVA_BUILD}/OpenJDK21U-jre_x64_windows_hotspot_${JAVA_VERSION}_${JAVA_BUILD}.zip" -o /tmp/jre-win.zip
-            (cd src-tauri/resources/jre/win && unzip -q /tmp/jre-win.zip && mv */* . && rmdir */ 2>/dev/null || true)
+          echo "=== Verificando JRE Windows ==="
+          if [ -f "src-tauri/resources/jre/win/bin/java.exe" ]; then
+            echo "✓ JRE Windows encontrado"
           else
-            echo "JRE Windows already present"
+            echo "✗ JRE Windows NÃO encontrado - build falhará"
+            exit 1
+          fi
+          
+          echo "=== Verificando PrismLauncher macOS ==="
+          if [ -f "src-tauri/resources/prism/mac/Prism Launcher.app/Contents/MacOS/prismlauncher" ]; then
+            echo "✓ PrismLauncher macOS encontrado"
+          else
+            echo "✗ PrismLauncher macOS NÃO encontrado - build falhará"
+            exit 1
+          fi
+          
+          echo "=== Verificando PrismLauncher Windows ==="
+          if [ -f "src-tauri/resources/prism/win/prismlauncher.exe" ]; then
+            echo "✓ PrismLauncher Windows encontrado"
+          else
+            echo "✗ PrismLauncher Windows NÃO encontrado - build falhará"
+            exit 1
+          fi
+          
+          echo "=== Verificando Minecraft + Forge ==="
+          if [ -f "src-tauri/resources/minecraft/versions/${FORGE_VERSION}/forge-${FORGE_VERSION}.jar" ]; then
+            echo "✓ Forge universal.jar encontrado"
+          else
+            echo "✗ Forge universal.jar NÃO encontrado - build falhará"
+            exit 1
+          fi
+          
+          if [ -d "src-tauri/resources/minecraft/libraries" ] && [ -n "$(ls -A src-tauri/resources/minecraft/libraries)" ]; then
+            echo "✓ Libraries do Forge encontradas"
+          else
+            echo "✗ Libraries do Forge NÃO encontradas - build falhará"
+            exit 1
           fi
 
-      - name: Verificar/baixar PrismLauncher portable (mac + win)
+      - name: Gerar patch OneSix do Forge
         run: |
           set -euo pipefail
-          mkdir -p src-tauri/resources/prism/mac src-tauri/resources/prism/win
-          
-          # macOS - only download if missing
-          if [ ! -f "src-tauri/resources/prism/mac/Prism Launcher.app/Contents/MacOS/prismlauncher" ]; then
-            echo "Downloading PrismLauncher macOS..."
-            curl -fL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-macOS-${PRISM_VERSION}.zip" -o /tmp/prism-mac.zip
-            (cd src-tauri/resources/prism/mac && unzip -q /tmp/prism-mac.zip)
-          else
-            echo "PrismLauncher macOS already present"
-          fi
-          
-          # Windows - only download if missing
-          if [ ! -f src-tauri/resources/prism/win/prismlauncher.exe ]; then
-            echo "Downloading PrismLauncher Windows..."
-            curl -fL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-Windows-MinGW-w64-Portable-${PRISM_VERSION}.zip" -o /tmp/prism-win.zip
-            (cd src-tauri/resources/prism/win && unzip -q /tmp/prism-win.zip && mv */* . 2>/dev/null || true)
-          else
-            echo "PrismLauncher Windows already present"
-          fi
-
-      - name: Baixar Forge + instalar libraries (se minecraft vazio)
-        run: |
-          set -euo pipefail
-          mkdir -p src-tauri/resources/minecraft/versions/${FORGE_VERSION}
-          
-          # Universal jar - only download if missing
-          if [ ! -f src-tauri/resources/minecraft/versions/${FORGE_VERSION}/forge-${FORGE_VERSION}.jar ]; then
-            echo "Downloading Forge universal jar..."
-            curl -fsSL "https://maven.minecraftforge.net/net/minecraftforge/forge/${FORGE_VERSION}/forge-${FORGE_VERSION}-universal.jar" -o src-tauri/resources/minecraft/versions/${FORGE_VERSION}/forge-${FORGE_VERSION}.jar
-          else
-            echo "Forge universal jar already present"
-          fi
-          
-          # Installer para gerar libraries/ e assets/ - only if minecraft dir empty
-          if [ -z "$(ls -A src-tauri/resources/minecraft/libraries 2>/dev/null)" ]; then
-            echo "Generating libraries/assets via Forge installer..."
-            curl -fsSL "https://maven.minecraftforge.net/net/minecraftforge/forge/${FORGE_VERSION}/forge-${FORGE_VERSION}-installer.jar" -o /tmp/forge-installer.jar
-            mkdir -p /tmp/mc-staging/.minecraft
-            cd /tmp/mc-staging
-            java -jar /tmp/forge-installer.jar --installClient || true
-            cp -r .minecraft/* ../src-tauri/resources/minecraft/ 2>/dev/null || true
-          else
-            echo "Minecraft libraries already present"
-          fi
-          
-          # OneSix patch
           mkdir -p src-tauri/resources/forge-patch
           cat > /tmp/forge-patch.py << 'PYEOF'
 import json, os
