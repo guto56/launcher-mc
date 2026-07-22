@@ -1,142 +1,222 @@
 name: Build Nexus Launcher
-'on':
+
+on:
   push:
     branches:
-    - main
+      - main
     tags:
-    - v*
+      - v*
   workflow_dispatch: {}
+
 env:
-  FORGE_VERSION: 1.20.1-47.4.21
-  PRISM_VERSION: 11.0.3
-  JAVA_VERSION: 21.0.11
-  JAVA_BUILD: '10'
+  FORGE_VERSION: "1.20.1-47.4.21"
+  PRISM_VERSION: "11.0.3"
+  JAVA_VERSION: "21.0.11"
+  JAVA_BUILD: "10"
+
 jobs:
+  # ---------------------------------------------------------------------------
+  # Prepare: usa recursos JÁ COMMITADOS no repo (jre/, prism/, minecraft/).
+  # Baixa apenas o que falta e gera o patch OneSix do Forge.
+  # ---------------------------------------------------------------------------
   prepare:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - name: Setup Java 21 (para installer)
-      uses: actions/setup-java@v4
-      with:
-        distribution: temurin
-        java-version: '21'
-    - name: Baixar JRE 21 Temurin (mac-aarch64 + win-x64)
-      run: 'set -euo pipefail
+      - uses: actions/checkout@v4
 
-        mkdir -p src-tauri/resources/jre/mac src-tauri/resources/jre/win
+      - name: Setup Java 21 (para Forge installer)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
 
-        # macOS aarch64
+      - name: Verificar/baixar JRE 21 Temurin (mac-aarch64 + win-x64)
+        run: |
+          set -euo pipefail
+          mkdir -p src-tauri/resources/jre/mac src-tauri/resources/jre/win
+          
+          # macOS aarch64 - only download if missing
+          if [ ! -f src-tauri/resources/jre/mac/Contents/Home/bin/java ]; then
+            echo "Downloading JRE macOS..."
+            curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-${JAVA_VERSION}%2B${JAVA_BUILD}/OpenJDK21U-jre_aarch64_mac_hotspot_${JAVA_VERSION}_${JAVA_BUILD}.tar.gz" -o /tmp/jre-mac.tar.gz
+            tar -xzf /tmp/jre-mac.tar.gz -C src-tauri/resources/jre/mac --strip-components=1
+          else
+            echo "JRE macOS already present"
+          fi
+          
+          # Windows x64 - only download if missing
+          if [ ! -f src-tauri/resources/jre/win/bin/java.exe ]; then
+            echo "Downloading JRE Windows..."
+            curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-${JAVA_VERSION}%2B${JAVA_BUILD}/OpenJDK21U-jre_x64_windows_hotspot_${JAVA_VERSION}_${JAVA_BUILD}.zip" -o /tmp/jre-win.zip
+            (cd src-tauri/resources/jre/win && unzip -q /tmp/jre-win.zip && mv */* . && rmdir */ 2>/dev/null || true)
+          else
+            echo "JRE Windows already present"
+          fi
 
-        curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-${JAVA_VERSION}%2B${JAVA_BUILD}/OpenJDK21U-jre_aarch64_mac_hotspot_${JAVA_VERSION}_${JAVA_BUILD}.tar.gz" -o /tmp/jre-mac.tar.gz
+      - name: Verificar/baixar PrismLauncher portable (mac + win)
+        run: |
+          set -euo pipefail
+          mkdir -p src-tauri/resources/prism/mac src-tauri/resources/prism/win
+          
+          # macOS - only download if missing
+          if [ ! -f "src-tauri/resources/prism/mac/Prism Launcher.app/Contents/MacOS/prismlauncher" ]; then
+            echo "Downloading PrismLauncher macOS..."
+            curl -fL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-macOS-${PRISM_VERSION}.zip" -o /tmp/prism-mac.zip
+            (cd src-tauri/resources/prism/mac && unzip -q /tmp/prism-mac.zip)
+          else
+            echo "PrismLauncher macOS already present"
+          fi
+          
+          # Windows - only download if missing
+          if [ ! -f src-tauri/resources/prism/win/prismlauncher.exe ]; then
+            echo "Downloading PrismLauncher Windows..."
+            curl -fL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-Windows-MinGW-w64-Portable-${PRISM_VERSION}.zip" -o /tmp/prism-win.zip
+            (cd src-tauri/resources/prism/win && unzip -q /tmp/prism-win.zip && mv */* . 2>/dev/null || true)
+          else
+            echo "PrismLauncher Windows already present"
+          fi
 
-        tar -xzf /tmp/jre-mac.tar.gz -C src-tauri/resources/jre/mac --strip-components=1
+      - name: Baixar Forge + instalar libraries (se minecraft vazio)
+        run: |
+          set -euo pipefail
+          mkdir -p src-tauri/resources/minecraft/versions/${FORGE_VERSION}
+          
+          # Universal jar - only download if missing
+          if [ ! -f src-tauri/resources/minecraft/versions/${FORGE_VERSION}/forge-${FORGE_VERSION}.jar ]; then
+            echo "Downloading Forge universal jar..."
+            curl -fsSL "https://maven.minecraftforge.net/net/minecraftforge/forge/${FORGE_VERSION}/forge-${FORGE_VERSION}-universal.jar" -o src-tauri/resources/minecraft/versions/${FORGE_VERSION}/forge-${FORGE_VERSION}.jar
+          else
+            echo "Forge universal jar already present"
+          fi
+          
+          # Installer para gerar libraries/ e assets/ - only if minecraft dir empty
+          if [ -z "$(ls -A src-tauri/resources/minecraft/libraries 2>/dev/null)" ]; then
+            echo "Generating libraries/assets via Forge installer..."
+            curl -fsSL "https://maven.minecraftforge.net/net/minecraftforge/forge/${FORGE_VERSION}/forge-${FORGE_VERSION}-installer.jar" -o /tmp/forge-installer.jar
+            mkdir -p /tmp/mc-staging/.minecraft
+            cd /tmp/mc-staging
+            java -jar /tmp/forge-installer.jar --installClient || true
+            cp -r .minecraft/* ../src-tauri/resources/minecraft/ 2>/dev/null || true
+          else
+            echo "Minecraft libraries already present"
+          fi
+          
+          # OneSix patch
+          mkdir -p src-tauri/resources/forge-patch
+          cat > /tmp/forge-patch.py << 'PYEOF'
+import json, os
+FORGE_VERSION = os.environ.get('FORGE_VERSION', '1.20.1-47.4.21')
+patch = {
+    'formatVersion': 1,
+    'uid': 'net.minecraftforge',
+    'version': FORGE_VERSION,
+    'name': 'Forge',
+    'jarMods': [{'path': f'versions/{FORGE_VERSION}/forge-{FORGE_VERSION}.jar'}],
+    'mainClass': 'net.minecraftforge.fml.common.launcher.FMLTweaker',
+    'libraries': [],
+    'requires': [{'uid': 'net.minecraft', 'equals': '1.20.1'}],
+}
+with open('src-tauri/resources/forge-patch/net.minecraftforge.json', 'w') as f:
+    json.dump(patch, f, indent=2)
+print('OneSix patch gerado')
+PYEOF
+          python3 /tmp/forge-patch.py
 
-        # Windows x64
+      - name: Upload embedded resources (artifact para build jobs)
+        uses: actions/upload-artifact@v4
+        with:
+          name: embedded-resources
+          path: src-tauri/resources/
 
-        curl -fsSL "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-${JAVA_VERSION}%2B${JAVA_BUILD}/OpenJDK21U-jre_x64_windows_hotspot_${JAVA_VERSION}_${JAVA_BUILD}.zip" -o /tmp/jre-win.zip
-
-        (cd src-tauri/resources/jre/win && unzip -q /tmp/jre-win.zip && mv */* . && rmdir */ 2>/dev/null || true)'
-    - name: Baixar PrismLauncher portable (mac + win)
-      run: 'set -euo pipefail
-
-        mkdir -p src-tauri/resources/prism/mac src-tauri/resources/prism/win
-
-        # macOS - novo nome do asset
-        curl -fsSL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-macOS-${PRISM_VERSION}.zip" -o /tmp/prism-mac.zip
-
-        (cd src-tauri/resources/prism/mac && unzip -q /tmp/prism-mac.zip)
-
-        # Windows portable
-        curl -fsSL "https://github.com/PrismLauncher/PrismLauncher/releases/download/${PRISM_VERSION}/PrismLauncher-Windows-MinGW-w64-Portable-${PRISM_VERSION}.zip" -o /tmp/prism-win.zip
-
-        (cd src-tauri/resources/prism/win && unzip -q /tmp/prism-win.zip && mv */* . 2>/dev/null || true)'
-    - name: Baixar Forge + instalar libraries
-      run: "set -euo pipefail\nmkdir -p src-tauri/resources/minecraft/versions/${FORGE_VERSION}\n# Universal jar\ncurl -fsSL \"https://maven.minecraftforge.net/net/minecraftforge/forge/${FORGE_VERSION}/forge-${FORGE_VERSION}-universal.jar\"\
-        \ -o src-tauri/resources/minecraft/versions/${FORGE_VERSION}/forge-${FORGE_VERSION}.jar\n# Installer para gerar libraries/ e assets/\ncurl -fsSL \"https://maven.minecraftforge.net/net/minecraftforge/forge/${FORGE_VERSION}/forge-${FORGE_VERSION}-installer.jar\"\
-        \ -o /tmp/forge-installer.jar\nmkdir -p /tmp/mc-staging/.minecraft\ncd /tmp/mc-staging\njava -jar /tmp/forge-installer.jar --installClient || true\ncp -r .minecraft/* ../src-tauri/resources/minecraft/\
-        \ 2>/dev/null || true\n# OneSix patch\nmkdir -p src-tauri/resources/forge-patch\ncat > /tmp/forge-patch.py << 'PYEOF'\nimport json, os\nFORGE_VERSION = os.environ.get('FORGE_VERSION', '1.20.1-47.4.21')\n\
-        patch = {\n    'formatVersion': 1,\n    'uid': 'net.minecraftforge',\n    'version': FORGE_VERSION,\n    'name': 'Forge',\n    'jarMods': [{'path': f'versions/{FORGE_VERSION}/forge-{FORGE_VERSION}.jar'}],\n\
-        \    'mainClass': 'net.minecraftforge.fml.common.launcher.FMLTweaker',\n    'libraries': [],\n    'requires': [{'uid': 'net.minecraft', 'equals': '1.20.1'}],\n}\nwith open('src-tauri/resources/forge-patch/net.minecraftforge.json',\
-        \ 'w') as f:\n    json.dump(patch, f, indent=2)\nprint('Patch gerado')\nPYEOF\npython3 /tmp/forge-patch.py"
-    - name: Upload embedded resources
-      uses: actions/upload-artifact@v4
-      with:
-        name: embedded-resources
-        path: src-tauri/resources/
+  # ---------------------------------------------------------------------------
+  # builds consomem o artifact acima
+  # ---------------------------------------------------------------------------
   build-macos:
     needs: prepare
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v4
-    - name: Download embedded resources
-      uses: actions/download-artifact@v4
-      with:
-        name: embedded-resources
-        path: src-tauri/resources
-    - uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-    - uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: aarch64-apple-darwin
-    - name: Install frontend deps
-      run: npm install
-    - name: Build Tauri (macOS Silicon)
-      run: npm run tauri build -- --target aarch64-apple-darwin
-      env:
-        LAUNCHER_API_BASE: ${{ secrets.LAUNCHER_API_BASE || 'https://painel-mc.centralchamados.xyz' }}
-        APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
-        APPLE_ID: ${{ secrets.APPLE_ID }}
-        APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: launcher-mac-silicon-dmg
-        path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+      - uses: actions/checkout@v4
+
+      - name: Download embedded resources
+        uses: actions/download-artifact@v4
+        with:
+          name: embedded-resources
+          path: src-tauri/resources
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install frontend deps
+        run: npm install
+
+      - name: Build Tauri (macOS Silicon)
+        run: npm run tauri build -- --target aarch64-apple-darwin
+        env:
+          LAUNCHER_API_BASE: ${{ secrets.LAUNCHER_API_BASE || 'https://painel-mc.centralchamados.xyz' }}
+          APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-mac-silicon-dmg
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+
   build-windows:
     name: Build Windows (x64 .msi)
     needs: prepare
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-    - uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: x86_64-pc-windows-msvc
-    - uses: swatinem/rust-cache@v2
-      with:
-        workspaces: ./src-tauri -> target
-    - name: Download embedded resources
-      uses: actions/download-artifact@v4
-      with:
-        name: embedded-resources
-        path: src-tauri/resources
-    - name: Install frontend deps
-      run: npm install
-    - name: Build Tauri (Windows)
-      run: npm run tauri build
-      env:
-        LAUNCHER_API_BASE: ${{ secrets.LAUNCHER_API_BASE || 'https://painel-mc.centralchamados.xyz' }}
-    - name: Upload MSI
-      uses: actions/upload-artifact@v4
-      with:
-        name: launcher-windows-msi
-        path: src-tauri/target/release/bundle/msi/*.msi
-        if-no-files-found: error
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Download embedded resources
+        uses: actions/download-artifact@v4
+        with:
+          name: embedded-resources
+          path: src-tauri/resources
+
+      - name: Install frontend deps
+        run: npm install
+
+      - name: Build Tauri (Windows)
+        run: npm run tauri build
+        env:
+          LAUNCHER_API_BASE: ${{ secrets.LAUNCHER_API_BASE || 'https://painel-mc.centralchamados.xyz' }}
+
+      - name: Upload MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-windows-msi
+          path: src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+
   release:
-    needs:
-    - build-macos
-    - build-windows
+    needs: [build-macos, build-windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/download-artifact@v4
-      with:
-        path: artifacts
-    - uses: softprops/action-gh-release@v2
-      with:
-        files: artifacts/**/*
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
